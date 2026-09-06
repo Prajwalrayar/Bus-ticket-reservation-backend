@@ -1,0 +1,402 @@
+package com.crimsonlogic.busticketbooking.service.impl;
+
+import com.crimsonlogic.busticketbooking.dto.RouteStopCreateRequest;
+import com.crimsonlogic.busticketbooking.dto.RouteStopDTO;
+import com.crimsonlogic.busticketbooking.entity.Route;
+import com.crimsonlogic.busticketbooking.entity.RouteStop;
+import com.crimsonlogic.busticketbooking.enums.StopType;
+import com.crimsonlogic.busticketbooking.repository.RouteRepository;
+import com.crimsonlogic.busticketbooking.repository.RouteStopRepository;
+import com.crimsonlogic.busticketbooking.service.RouteStopService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+@Transactional
+public class RouteStopServiceImpl implements RouteStopService {
+
+    private final RouteStopRepository routeStopRepository;
+    private final RouteRepository routeRepository;
+
+    @Override
+    public RouteStopDTO createRouteStop(
+            String source,
+            String destination,
+            RouteStopCreateRequest request) {
+
+        Route route = findRoute(source, destination);
+
+        if (!Boolean.TRUE.equals(route.getIsActive())) {
+            throw new IllegalArgumentException(
+                    "Cannot add a stop to an inactive route"
+            );
+        }
+
+        /*
+         * Stop sequence must be unique within a route.
+         */
+        if (routeStopRepository
+                .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequence(
+                        source,
+                        destination,
+                        request.getStopSequence()
+                )) {
+
+            throw new IllegalArgumentException(
+                    "Stop sequence "
+                            + request.getStopSequence()
+                            + " already exists on this route"
+            );
+        }
+
+        /*
+         * Stop name should not be duplicated within
+         * the same route.
+         */
+        if (routeStopRepository
+                .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopNameIgnoreCase(
+                        source,
+                        destination,
+                        request.getStopName()
+                )) {
+
+            throw new IllegalArgumentException(
+                    "Stop '"
+                            + request.getStopName()
+                            + "' already exists on this route"
+            );
+        }
+
+        /*
+         * The source stop must be at the beginning
+         * and destination stop at the end.
+         */
+        validateStopTypeAndSequence(
+                route,
+                request
+        );
+
+        RouteStop routeStop = new RouteStop();
+
+        routeStop.setStopName(
+                request.getStopName()
+        );
+
+        routeStop.setStopSequence(
+                request.getStopSequence()
+        );
+
+        routeStop.setStopType(
+                request.getStopType()
+        );
+
+        routeStop.setDistanceFromSourceKm(
+                request.getDistanceFromSourceKm()
+        );
+
+        routeStop.setRoute(route);
+
+        RouteStop savedStop =
+                routeStopRepository.save(routeStop);
+
+        return convertToDTO(savedStop);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RouteStopDTO getRouteStop(
+            String source,
+            String destination,
+            String stopName) {
+
+        RouteStop routeStop =
+                routeStopRepository
+                        .findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopNameIgnoreCase(
+                                source,
+                                destination,
+                                stopName
+                        )
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "Stop '"
+                                                + stopName
+                                                + "' not found on route '"
+                                                + source
+                                                + " → "
+                                                + destination
+                                                + "'"
+                                )
+                        );
+
+        return convertToDTO(routeStop);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RouteStopDTO> getRouteStops(
+            String source,
+            String destination) {
+
+        /*
+         * Verify that the route exists.
+         */
+        findRoute(source, destination);
+
+        return routeStopRepository
+                .findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseOrderByStopSequenceAsc(
+                        source,
+                        destination
+                )
+                .stream()
+                .map(this::convertToDTO)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RouteStopDTO> getRouteStopsByType(
+            String source,
+            String destination,
+            StopType stopType) {
+
+        findRoute(source, destination);
+
+        return routeStopRepository
+                .findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopType(
+                        source,
+                        destination,
+                        stopType
+                )
+                .stream()
+                .map(this::convertToDTO)
+                .toList();
+    }
+
+    @Override
+    public RouteStopDTO updateRouteStop(
+            String source,
+            String destination,
+            String stopName,
+            RouteStopCreateRequest request) {
+
+        RouteStop existingStop =
+                routeStopRepository
+                        .findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopNameIgnoreCase(
+                                source,
+                                destination,
+                                stopName
+                        )
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "Stop '"
+                                                + stopName
+                                                + "' not found on route '"
+                                                + source
+                                                + " → "
+                                                + destination
+                                                + "'"
+                                )
+                        );
+
+        /*
+         * Check whether the new stop sequence is already
+         * used by another stop on the route.
+         */
+        if (!existingStop.getStopSequence()
+                .equals(request.getStopSequence())
+                && routeStopRepository
+                .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequence(
+                        source,
+                        destination,
+                        request.getStopSequence()
+                )) {
+
+            throw new IllegalArgumentException(
+                    "Stop sequence "
+                            + request.getStopSequence()
+                            + " already exists on this route"
+            );
+        }
+
+        /*
+         * If the stop name is changed, make sure the new
+         * name doesn't already exist on the route.
+         */
+        if (!existingStop.getStopName()
+                .equalsIgnoreCase(request.getStopName())
+                && routeStopRepository
+                .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopNameIgnoreCase(
+                        source,
+                        destination,
+                        request.getStopName()
+                )) {
+
+            throw new IllegalArgumentException(
+                    "Stop '"
+                            + request.getStopName()
+                            + "' already exists on this route"
+            );
+        }
+
+        existingStop.setStopName(
+                request.getStopName()
+        );
+
+        existingStop.setStopSequence(
+                request.getStopSequence()
+        );
+
+        existingStop.setStopType(
+                request.getStopType()
+        );
+
+        existingStop.setDistanceFromSourceKm(
+                request.getDistanceFromSourceKm()
+        );
+
+        RouteStop updatedStop =
+                routeStopRepository.save(existingStop);
+
+        return convertToDTO(updatedStop);
+    }
+
+    /*
+     * Find route using its business identity:
+     * source + destination.
+     */
+    private Route findRoute(
+            String source,
+            String destination) {
+
+        return routeRepository
+                .findBySourceIgnoreCaseAndDestinationIgnoreCase(
+                        source,
+                        destination
+                )
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Route from '"
+                                        + source
+                                        + "' to '"
+                                        + destination
+                                        + "' not found"
+                        )
+                );
+    }
+
+    /*
+     * Validates logical position of source/destination stops.
+     */
+    private void validateStopTypeAndSequence(
+            Route route,
+            RouteStopCreateRequest request) {
+
+        if (request.getStopSequence() <= 0) {
+            throw new IllegalArgumentException(
+                    "Stop sequence must be greater than zero"
+            );
+        }
+
+        if (request.getDistanceFromSourceKm() != null
+                && request.getDistanceFromSourceKm().compareTo(
+                BigDecimal.ZERO
+        ) < 0) {
+
+            throw new IllegalArgumentException(
+                    "Distance from source cannot be negative"
+            );
+        }
+
+        List<RouteStop> existingStops =
+                routeStopRepository
+                        .findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseOrderByStopSequenceAsc(
+                                route.getSource(),
+                                route.getDestination()
+                        );
+
+        /*
+         * A boarding point should occur before any
+         * dropping point on the route.
+         */
+        if (request.getStopType() == StopType.BOARDING) {
+
+            boolean droppingPointAfterThisStop =
+                    existingStops.stream()
+                            .anyMatch(stop ->
+                                    stop.getStopType() == StopType.DROPPING
+                                            && stop.getStopSequence()
+                                            < request.getStopSequence()
+                            );
+
+            if (droppingPointAfterThisStop) {
+                throw new IllegalArgumentException(
+                        "A boarding point cannot occur after a dropping point"
+                );
+            }
+        }
+
+        /*
+         * A dropping point should occur after any
+         * boarding point on the route.
+         */
+        if (request.getStopType() == StopType.DROPPING) {
+
+            boolean boardingPointAfterThisStop =
+                    existingStops.stream()
+                            .anyMatch(stop ->
+                                    stop.getStopType() == StopType.BOARDING
+                                            && stop.getStopSequence()
+                                            > request.getStopSequence()
+                            );
+
+            if (boardingPointAfterThisStop) {
+                throw new IllegalArgumentException(
+                        "A dropping point cannot occur before a boarding point"
+                );
+            }
+        }
+    }
+
+    private RouteStopDTO convertToDTO(
+            RouteStop routeStop) {
+
+        RouteStopDTO dto = new RouteStopDTO();
+
+        dto.setRouteStopId(
+                routeStop.getRouteStopId()
+        );
+
+        dto.setStopName(
+                routeStop.getStopName()
+        );
+
+        dto.setStopSequence(
+                routeStop.getStopSequence()
+        );
+
+        dto.setStopType(
+                routeStop.getStopType()
+        );
+
+        dto.setDistanceFromSourceKm(
+                routeStop.getDistanceFromSourceKm()
+        );
+
+        if (routeStop.getRoute() != null) {
+            dto.setSource(
+                    routeStop.getRoute().getSource()
+            );
+
+            dto.setDestination(
+                    routeStop.getRoute().getDestination()
+            );
+        }
+
+        return dto;
+    }
+}
