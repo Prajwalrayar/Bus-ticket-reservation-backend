@@ -21,7 +21,7 @@ public class AiRecommendationController {
     private final AiRecommendationService aiRecommendationService;
 
     @GetMapping("/{userId}")
-    @PreAuthorize("hasRole('ADMIN') or #userId == authentication.principal.id or #userId == authentication.principal.username")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<List<RecommendationDTO>>> getRecommendations(@PathVariable String userId) {
         
         List<RecommendationDTO> recommendations = aiRecommendationService.getRecommendations(userId);

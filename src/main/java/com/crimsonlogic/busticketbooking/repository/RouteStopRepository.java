@@ -25,10 +25,11 @@ public interface RouteStopRepository extends JpaRepository<RouteStop, String> {
     );
 
     boolean
-    existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequence(
+    existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
             String source,
             String destination,
-            Integer stopSequence
+            Integer stopSequence,
+            StopType stopType
     );
 
     boolean

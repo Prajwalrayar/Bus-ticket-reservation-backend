@@ -14,8 +14,8 @@ import java.time.LocalTime;
 
 @Entity
 @Table(name = "route_stops", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_route_stops_route_sequence",
-                columnNames = {"route_id", "stop_sequence"})
+        @UniqueConstraint(name = "uk_route_stops_route_type_sequence",
+                columnNames = {"route_id", "stop_type", "stop_sequence"})
         }
 )
 @Getter

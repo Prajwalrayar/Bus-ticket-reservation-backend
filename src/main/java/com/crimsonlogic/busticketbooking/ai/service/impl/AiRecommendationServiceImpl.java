@@ -44,10 +44,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         TripSearchRequest searchRequest = new TripSearchRequest();
         searchRequest.setSource(source);
         searchRequest.setDestination(destination);
-        // Leaving travelDate null fetches all dates, but we want only upcoming. 
-        // We will fetch all and filter manually, or set travelDate to today.
-        // The service filters by departureStart if provided.
-        searchRequest.setDepartureStart(java.time.LocalTime.MIN); // Just ensuring it's not null if we want strict time, actually null is better.
+        // Leaving travelDate null fetches all dates; we filter upcoming below.
 
         List<TripDTO> availableTrips = tripService.searchTrips(searchRequest);
 

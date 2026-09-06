@@ -38,19 +38,34 @@ public class RouteStopServiceImpl implements RouteStopService {
         }
 
         /*
-         * Stop sequence must be unique within a route.
+         * Stop sequence must be unique within a route per StopType.
+         * If the new stop is BOTH, it shouldn't conflict with any existing sequence.
          */
-        if (routeStopRepository
-                .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequence(
-                        source,
-                        destination,
-                        request.getStopSequence()
-                )) {
+        boolean sequenceExists = false;
+        if (request.getStopType() == StopType.INTERMEDIATE) {
+             sequenceExists = routeStopRepository
+                .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
+                        source, destination, request.getStopSequence(), StopType.BOARDING) ||
+                routeStopRepository
+                .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
+                        source, destination, request.getStopSequence(), StopType.DROPPING) ||
+                routeStopRepository
+                .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
+                        source, destination, request.getStopSequence(), StopType.INTERMEDIATE);
+        } else {
+             sequenceExists = routeStopRepository
+                .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
+                        source, destination, request.getStopSequence(), request.getStopType()) ||
+                routeStopRepository
+                .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
+                        source, destination, request.getStopSequence(), StopType.INTERMEDIATE);
+        }
 
+        if (sequenceExists) {
             throw new IllegalArgumentException(
                     "Stop sequence "
                             + request.getStopSequence()
-                            + " already exists on this route"
+                            + " already exists for " + request.getStopType() + " on this route"
             );
         }
 
@@ -205,22 +220,36 @@ public class RouteStopServiceImpl implements RouteStopService {
 
         /*
          * Check whether the new stop sequence is already
-         * used by another stop on the route.
+         * used by another stop on the route for this type.
          */
-        if (!existingStop.getStopSequence()
-                .equals(request.getStopSequence())
-                && routeStopRepository
-                .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequence(
-                        source,
-                        destination,
-                        request.getStopSequence()
-                )) {
-
-            throw new IllegalArgumentException(
-                    "Stop sequence "
-                            + request.getStopSequence()
-                            + " already exists on this route"
-            );
+        if (!existingStop.getStopSequence().equals(request.getStopSequence()) || existingStop.getStopType() != request.getStopType()) {
+            boolean sequenceExists = false;
+            if (request.getStopType() == StopType.INTERMEDIATE) {
+                 sequenceExists = routeStopRepository
+                    .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
+                            source, destination, request.getStopSequence(), StopType.BOARDING) ||
+                    routeStopRepository
+                    .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
+                            source, destination, request.getStopSequence(), StopType.DROPPING) ||
+                    routeStopRepository
+                    .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
+                            source, destination, request.getStopSequence(), StopType.INTERMEDIATE);
+            } else {
+                 sequenceExists = routeStopRepository
+                    .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
+                            source, destination, request.getStopSequence(), request.getStopType()) ||
+                    routeStopRepository
+                    .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
+                            source, destination, request.getStopSequence(), StopType.INTERMEDIATE);
+            }
+            
+            if (sequenceExists) {
+                throw new IllegalArgumentException(
+                        "Stop sequence "
+                                + request.getStopSequence()
+                                + " already exists for " + request.getStopType() + " on this route"
+                );
+            }
         }
 
         /*
@@ -329,8 +358,7 @@ public class RouteStopServiceImpl implements RouteStopService {
                     existingStops.stream()
                             .anyMatch(stop ->
                                     stop.getStopType() == StopType.DROPPING
-                                            && stop.getStopSequence()
-                                            < request.getStopSequence()
+                                            && stop.getDistanceFromSourceKm().compareTo(request.getDistanceFromSourceKm()) < 0
                             );
 
             if (droppingPointAfterThisStop) {
@@ -350,8 +378,7 @@ public class RouteStopServiceImpl implements RouteStopService {
                     existingStops.stream()
                             .anyMatch(stop ->
                                     stop.getStopType() == StopType.BOARDING
-                                            && stop.getStopSequence()
-                                            > request.getStopSequence()
+                                            && stop.getDistanceFromSourceKm().compareTo(request.getDistanceFromSourceKm()) > 0
                             );
 
             if (boardingPointAfterThisStop) {
