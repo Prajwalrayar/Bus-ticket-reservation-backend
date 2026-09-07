@@ -40,4 +40,6 @@ public class TripCreateRequest {
     @NotNull
     @DecimalMin(value = "0.01")
     private BigDecimal baseFare;
+
+    private java.util.Map<String, BigDecimal> stopFares;
 }

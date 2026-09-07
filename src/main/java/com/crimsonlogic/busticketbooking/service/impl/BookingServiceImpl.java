@@ -247,11 +247,31 @@ public class BookingServiceImpl implements BookingService {
 
 
             /*
-             * Calculate base fare.
+             * Calculate base fare using intermediate stops if available.
              */
+            BigDecimal seatFare = tripSeat.getSeatFare();
+            if (trip.getStopFares() != null && !trip.getStopFares().isEmpty()) {
+                BigDecimal sourceFare = BigDecimal.ZERO;
+                BigDecimal destFare = trip.getBaseFare();
+
+                for (com.crimsonlogic.busticketbooking.entity.TripStopFare tsf : trip.getStopFares()) {
+                    if (tsf.getRouteStop().getRouteStopId().equals(boardingPoint.getRouteStopId())) {
+                        sourceFare = tsf.getFareFromSource();
+                    }
+                    if (tsf.getRouteStop().getRouteStopId().equals(droppingPoint.getRouteStopId())) {
+                        destFare = tsf.getFareFromSource();
+                    }
+                }
+
+                BigDecimal segmentFare = destFare.subtract(sourceFare);
+                if (segmentFare.compareTo(BigDecimal.ZERO) > 0) {
+                    seatFare = segmentFare;
+                }
+            }
+
             baseFareTotal =
                     baseFareTotal.add(
-                            tripSeat.getSeatFare()
+                            seatFare
                     );
         }
 
@@ -675,9 +695,14 @@ public class BookingServiceImpl implements BookingService {
         /*
          * Passenger cannot board after
          * the dropping location.
+         *
+         * After the stop-type refactoring, stopSequence is
+         * scoped per StopType (BOARDING vs DROPPING) and
+         * therefore cannot be compared across types.
+         * Use distanceFromSourceKm which is route-global.
          */
-        if (boardingPoint.getStopSequence()
-                >= droppingPoint.getStopSequence()) {
+        if (boardingPoint.getDistanceFromSourceKm()
+                .compareTo(droppingPoint.getDistanceFromSourceKm()) >= 0) {
 
             throw new IllegalArgumentException(
                     "Boarding point must be before dropping point"

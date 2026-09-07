@@ -33,12 +33,14 @@ import java.util.List;
 public class TripServiceImpl implements TripService {
 
     private final TripRepository tripRepository;
-    private final TripSeatRepository tripSeatRepository;
     private final BusRepository busRepository;
     private final RouteRepository routeRepository;
+    private final com.crimsonlogic.busticketbooking.repository.BusSeatRepository busSeatRepository;
+    private final TripSeatRepository tripSeatRepository;
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
-    private final com.crimsonlogic.busticketbooking.repository.BusSeatRepository busSeatRepository;
+    private final com.crimsonlogic.busticketbooking.repository.RouteStopRepository routeStopRepository;
+    private final com.crimsonlogic.busticketbooking.repository.TripStopFareRepository tripStopFareRepository;
 
     /** Booking statuses that constitute an "active" booking. */
     private static final java.util.List<BookingStatus> ACTIVE_STATUSES =
@@ -162,6 +164,25 @@ public class TripServiceImpl implements TripService {
         }).toList();
 
         tripSeatRepository.saveAll(tripSeats);
+
+        // Save TripStopFares if provided
+        if (request.getStopFares() != null && !request.getStopFares().isEmpty()) {
+            java.util.List<com.crimsonlogic.busticketbooking.entity.TripStopFare> faresToSave = new java.util.ArrayList<>();
+            for (java.util.Map.Entry<String, java.math.BigDecimal> entry : request.getStopFares().entrySet()) {
+                com.crimsonlogic.busticketbooking.entity.RouteStop routeStop = routeStopRepository.findById(entry.getKey()).orElse(null);
+                if (routeStop != null && routeStop.getRoute().getRouteId().equals(route.getRouteId())) {
+                    com.crimsonlogic.busticketbooking.entity.TripStopFare tsf = new com.crimsonlogic.busticketbooking.entity.TripStopFare();
+                    tsf.setTrip(savedTrip);
+                    tsf.setRouteStop(routeStop);
+                    tsf.setFareFromSource(entry.getValue());
+                    faresToSave.add(tsf);
+                }
+            }
+            if (!faresToSave.isEmpty()) {
+                tripStopFareRepository.saveAll(faresToSave);
+                savedTrip.setStopFares(faresToSave);
+            }
+        }
 
         return convertToDTO(savedTrip);
     }
@@ -289,9 +310,31 @@ public class TripServiceImpl implements TripService {
                 request.getBaseFare()
         );
 
-        return convertToDTO(
-                tripRepository.save(trip)
-        );
+        Trip savedTrip = tripRepository.save(trip);
+
+        // Update TripStopFares if provided
+        if (request.getStopFares() != null) {
+            // Delete existing fares first (simplified update)
+            tripStopFareRepository.deleteAll(tripStopFareRepository.findByTrip_TripId(savedTrip.getTripId()));
+            
+            java.util.List<com.crimsonlogic.busticketbooking.entity.TripStopFare> faresToSave = new java.util.ArrayList<>();
+            for (java.util.Map.Entry<String, java.math.BigDecimal> entry : request.getStopFares().entrySet()) {
+                com.crimsonlogic.busticketbooking.entity.RouteStop routeStop = routeStopRepository.findById(entry.getKey()).orElse(null);
+                if (routeStop != null && routeStop.getRoute().getRouteId().equals(route.getRouteId())) {
+                    com.crimsonlogic.busticketbooking.entity.TripStopFare tsf = new com.crimsonlogic.busticketbooking.entity.TripStopFare();
+                    tsf.setTrip(savedTrip);
+                    tsf.setRouteStop(routeStop);
+                    tsf.setFareFromSource(entry.getValue());
+                    faresToSave.add(tsf);
+                }
+            }
+            if (!faresToSave.isEmpty()) {
+                tripStopFareRepository.saveAll(faresToSave);
+                savedTrip.setStopFares(faresToSave);
+            }
+        }
+
+        return convertToDTO(savedTrip);
     }
 
     @Override
@@ -303,14 +346,14 @@ public class TripServiceImpl implements TripService {
 
         if (request.getTravelDate() != null) {
             trips = tripRepository
-                    .findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndTravelDate(
+                    .findByIntermediateStopsAndTravelDate(
                             request.getSource(),
                             request.getDestination(),
                             request.getTravelDate()
                     );
         } else {
             trips = tripRepository
-                    .findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCase(
+                    .findByIntermediateStops(
                             request.getSource(),
                             request.getDestination()
                     );
@@ -323,6 +366,12 @@ public class TripServiceImpl implements TripService {
                         !Boolean.TRUE.equals(
                                 trip.getIsCancelled()
                         )
+                )
+
+                // Do not show trips that have already departed
+                .filter(trip -> 
+                        java.time.LocalDateTime.of(trip.getTravelDate(), trip.getDepartureTime())
+                                .isAfter(java.time.LocalDateTime.now())
                 )
 
                 // Bus type filter
@@ -398,8 +447,40 @@ public class TripServiceImpl implements TripService {
                         )
                 )
 
-                .map(this::convertToDTO)
+                .map(trip -> convertToDTOWithDynamicFare(trip, request.getSource(), request.getDestination()))
                 .toList();
+    }
+
+    private TripDTO convertToDTOWithDynamicFare(Trip trip, String searchSource, String searchDestination) {
+        TripDTO dto = convertToDTO(trip);
+        
+        // If exact source and destination match the route, baseFare is unchanged
+        if (trip.getRoute().getSource().equalsIgnoreCase(searchSource) && 
+            trip.getRoute().getDestination().equalsIgnoreCase(searchDestination)) {
+            return dto;
+        }
+
+        // Otherwise, calculate dynamic fare based on TripStopFares
+        if (trip.getStopFares() != null && !trip.getStopFares().isEmpty()) {
+            java.math.BigDecimal sourceFare = java.math.BigDecimal.ZERO;
+            java.math.BigDecimal destFare = trip.getBaseFare();
+
+            for (com.crimsonlogic.busticketbooking.entity.TripStopFare tsf : trip.getStopFares()) {
+                if (tsf.getRouteStop().getStopName().equalsIgnoreCase(searchSource)) {
+                    sourceFare = tsf.getFareFromSource();
+                }
+                if (tsf.getRouteStop().getStopName().equalsIgnoreCase(searchDestination)) {
+                    destFare = tsf.getFareFromSource();
+                }
+            }
+
+            java.math.BigDecimal dynamicFare = destFare.subtract(sourceFare);
+            if (dynamicFare.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                dto.setBaseFare(dynamicFare);
+            }
+        }
+        
+        return dto;
     }
 
 
@@ -589,7 +670,7 @@ public class TripServiceImpl implements TripService {
             LocalDate travelDate) {
 
         return tripRepository
-                .findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndTravelDate(
+                .findByIntermediateStopsAndTravelDate(
                         source,
                         destination,
                         travelDate
@@ -758,6 +839,20 @@ public class TripServiceImpl implements TripService {
                     .count();
             dto.setTotalSeats(total);
             dto.setAvailableSeats((int) available);
+        }
+
+        if (trip.getStopFares() != null && !trip.getStopFares().isEmpty()) {
+            dto.setStopFares(trip.getStopFares().stream().map(tsf -> {
+                com.crimsonlogic.busticketbooking.dto.TripStopFareDTO tsfDTO = new com.crimsonlogic.busticketbooking.dto.TripStopFareDTO();
+                tsfDTO.setRouteStopId(tsf.getRouteStop().getRouteStopId());
+                tsfDTO.setStopName(tsf.getRouteStop().getStopName());
+                tsfDTO.setFareFromSource(tsf.getFareFromSource());
+                tsfDTO.setStopSequence(tsf.getRouteStop().getStopSequence());
+                tsfDTO.setStopType(tsf.getRouteStop().getStopType() != null ? tsf.getRouteStop().getStopType().name() : null);
+                return tsfDTO;
+            }).toList());
+        } else {
+            dto.setStopFares(new java.util.ArrayList<>());
         }
 
         return dto;
