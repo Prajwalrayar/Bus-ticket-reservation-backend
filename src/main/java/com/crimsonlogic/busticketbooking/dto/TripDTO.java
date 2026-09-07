@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Set;
 
 @Data
@@ -26,6 +27,8 @@ public class TripDTO {
     private LocalTime arrivalTime;
 
     private BigDecimal baseFare;
+
+    private List<TripStopFareDTO> stopFares;
 
     private Boolean isCancelled;
 

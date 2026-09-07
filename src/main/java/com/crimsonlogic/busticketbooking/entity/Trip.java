@@ -159,6 +159,14 @@ public class Trip {
     )
     private List<TripSeat> tripSeats = new ArrayList<>();
 
+    @OneToMany(
+            mappedBy = "trip",
+            fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
+    private List<TripStopFare> stopFares = new ArrayList<>();
+
     @PrePersist
     protected void generateId() {
         if (this.tripId == null) {
