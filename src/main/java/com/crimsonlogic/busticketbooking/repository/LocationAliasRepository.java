@@ -9,4 +9,8 @@ import java.util.List;
 @Repository
 public interface LocationAliasRepository extends JpaRepository<LocationAlias, Long> {
     List<LocationAlias> findByLocation_LocationIdAndIsActiveTrue(Long locationId);
+    
+    List<LocationAlias> findByLocation_LocationId(Long locationId);
+    
+    boolean existsByAliasIgnoreCase(String alias);
 }

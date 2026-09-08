@@ -32,4 +32,6 @@ public interface BookingService {
             String bookingId,
             BookingCancelRequest request
     );
+
+    void expireBookings();
 }

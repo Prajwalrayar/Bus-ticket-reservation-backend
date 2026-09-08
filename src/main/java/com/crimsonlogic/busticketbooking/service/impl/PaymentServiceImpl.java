@@ -48,8 +48,16 @@ public class PaymentServiceImpl implements PaymentService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new IllegalArgumentException("Booking not found"));
 
-        if (booking.getBookingStatus() == BookingStatus.CANCELLED) {
-            throw new IllegalArgumentException("Cannot pay for a cancelled booking");
+        if (booking.getBookingStatus() == BookingStatus.CANCELLED || booking.getBookingStatus() == BookingStatus.FAILED) {
+            throw new IllegalArgumentException("Cannot pay for a cancelled or failed booking");
+        }
+
+        if (booking.getBookingStatus() != BookingStatus.PENDING) {
+            throw new IllegalArgumentException("Booking is no longer pending");
+        }
+
+        if (booking.getExpiryTime() != null && booking.getExpiryTime().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Booking payment window has expired");
         }
 
         boolean alreadyPaid = paymentRepository
@@ -90,8 +98,16 @@ public class PaymentServiceImpl implements PaymentService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new IllegalArgumentException("Booking not found"));
 
-        if (booking.getBookingStatus() == BookingStatus.CANCELLED) {
-            throw new IllegalArgumentException("Cannot pay for a cancelled booking");
+        if (booking.getBookingStatus() == BookingStatus.CANCELLED || booking.getBookingStatus() == BookingStatus.FAILED) {
+            throw new IllegalArgumentException("Cannot pay for a cancelled or failed booking");
+        }
+
+        if (booking.getBookingStatus() != BookingStatus.PENDING) {
+            throw new IllegalArgumentException("Booking is no longer pending");
+        }
+
+        if (booking.getExpiryTime() != null && booking.getExpiryTime().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Booking payment window has expired");
         }
 
         // 80% success simulation (100% success if using WALLET only)

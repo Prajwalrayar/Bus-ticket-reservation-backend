@@ -71,5 +71,7 @@ public interface BookingRepository extends JpaRepository<Booking, String> {
             @Param("statuses") List<BookingStatus> statuses
     );
 
+    List<Booking> findByBookingStatusAndExpiryTimeBefore(BookingStatus status, java.time.LocalDateTime time);
+
 }
 

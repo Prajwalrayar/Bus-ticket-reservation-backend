@@ -47,4 +47,6 @@ public class BookingDTO {
     private List<BookingSeatDTO> bookingSeats;
 
     private LocalDateTime createdAt;
+    
+    private LocalDateTime expiryTime;
 }

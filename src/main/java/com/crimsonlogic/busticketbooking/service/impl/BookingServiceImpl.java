@@ -137,6 +137,8 @@ public class BookingServiceImpl implements BookingService {
         booking.setBookingStatus(
                 BookingStatus.PENDING
         );
+        
+        booking.setExpiryTime(LocalDateTime.now().plusMinutes(10));
 
         booking.setBookedByUser(user);
 
@@ -877,6 +879,9 @@ public class BookingServiceImpl implements BookingService {
                 booking.getCreatedAt()
         );
 
+        dto.setExpiryTime(
+                booking.getExpiryTime()
+        );
 
         if (booking.getBoardingPoint() != null) {
 
@@ -1039,5 +1044,42 @@ public class BookingServiceImpl implements BookingService {
                                 "Authenticated user not found"
                         )
                 );
+    }
+
+    @Override
+    @Transactional
+    public void expireBookings() {
+        List<Booking> expiredBookings = bookingRepository.findByBookingStatusAndExpiryTimeBefore(
+                BookingStatus.PENDING, LocalDateTime.now());
+
+        for (Booking booking : expiredBookings) {
+            booking.setBookingStatus(BookingStatus.FAILED);
+            
+            if (booking.getBookingSeats() != null) {
+                for (BookingSeat bs : booking.getBookingSeats()) {
+                    TripSeat ts = bs.getTripSeat();
+                    if (ts.getSeatStatus() == SeatStatus.TEMPORARILY_LOCKED) {
+                        ts.setSeatStatus(SeatStatus.AVAILABLE);
+                        ts.setLockedByUserId(null);
+                        ts.setLockExpiryTime(null);
+                        tripSeatRepository.save(ts);
+                    }
+                }
+            }
+
+            if (booking.getPayments() != null) {
+                for (com.crimsonlogic.busticketbooking.entity.Payment p : booking.getPayments()) {
+                    if (p.getPaymentStatus() == com.crimsonlogic.busticketbooking.enums.PaymentStatus.INITIATED) {
+                        p.setPaymentStatus(com.crimsonlogic.busticketbooking.enums.PaymentStatus.FAILED);
+                        p.setFailureReason("Payment window expired");
+                        p.setFailureCode("EXPIRED");
+                    }
+                }
+            }
+        }
+        
+        if (!expiredBookings.isEmpty()) {
+            bookingRepository.saveAll(expiredBookings);
+        }
     }
 }
