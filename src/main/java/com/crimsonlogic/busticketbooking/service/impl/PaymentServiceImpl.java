@@ -5,11 +5,13 @@ import com.crimsonlogic.busticketbooking.dto.PaymentRequest;
 import com.crimsonlogic.busticketbooking.entity.Booking;
 import com.crimsonlogic.busticketbooking.entity.Payment;
 import com.crimsonlogic.busticketbooking.entity.TripSeat;
+import com.crimsonlogic.busticketbooking.entity.Ticket;
 import com.crimsonlogic.busticketbooking.enums.BookingStatus;
 import com.crimsonlogic.busticketbooking.enums.PaymentStatus;
 import com.crimsonlogic.busticketbooking.enums.SeatStatus;
 import com.crimsonlogic.busticketbooking.repository.BookingRepository;
 import com.crimsonlogic.busticketbooking.repository.PaymentRepository;
+import com.crimsonlogic.busticketbooking.repository.TicketRepository;
 import com.crimsonlogic.busticketbooking.repository.TripSeatRepository;
 import com.crimsonlogic.busticketbooking.service.BookingService;
 import com.crimsonlogic.busticketbooking.service.PaymentService;
@@ -35,6 +37,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentRepository paymentRepository;
     private final BookingRepository bookingRepository;
     private final TripSeatRepository tripSeatRepository;
+    private final TicketRepository ticketRepository;
     private final EntityIdGenerator entityIdGenerator;
     private final WalletService walletService;
 
@@ -157,6 +160,14 @@ public class PaymentServiceImpl implements PaymentService {
             if (walletAmountUsed.compareTo(BigDecimal.ZERO) > 0) {
                 walletService.deductBalance(booking.getBookedByUser().getUserId(), walletAmountUsed, bookingId);
             }
+
+            // ── Generate Ticket ──────────────────────────────────────────────
+            Ticket ticket = new Ticket();
+            ticket.setBooking(booking);
+            ticket.setIssuedAt(LocalDateTime.now());
+            ticket.setTicketNumber("TKT-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+            ticket.setVerificationCode(UUID.randomUUID().toString());
+            ticketRepository.save(ticket);
 
         } else {
             // ── Release seat locks on payment failure ────────────────────────

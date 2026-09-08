@@ -28,18 +28,28 @@ public class WalletServiceImpl implements WalletService {
     private final WalletTransactionRepository walletTransactionRepository;
     private final UserRepository userRepository;
 
-    private String getCurrentUserId() {
+    private String getCurrentUserEmail() {
+        // Spring Security principal name = email (set in CustomUserDetailsService)
         return SecurityContextHolder.getContext().getAuthentication().getName();
     }
 
     private Wallet getCurrentWallet() {
-        String userId = getCurrentUserId();
-        return walletRepository.findByUser_UserId(userId)
-                .orElseThrow(() -> new IllegalArgumentException("Wallet not found for user"));
+        String email = getCurrentUserEmail();
+        return walletRepository.findByUser_UserEmail(email)
+                .orElseGet(() -> {
+                    // Auto-create wallet on first access for users who registered
+                    // before wallet feature was added
+                    User user = userRepository.findByUserEmail(email)
+                            .orElseThrow(() -> new IllegalArgumentException("User not found: " + email));
+                    Wallet newWallet = new Wallet();
+                    newWallet.setUser(user);
+                    newWallet.setBalance(BigDecimal.ZERO);
+                    return walletRepository.save(newWallet);
+                });
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public WalletDTO getMyWallet() {
         Wallet wallet = getCurrentWallet();
         return convertToDTO(wallet);
