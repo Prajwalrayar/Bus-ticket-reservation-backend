@@ -703,12 +703,15 @@ public class BookingServiceImpl implements BookingService {
          * therefore cannot be compared across types.
          * Use distanceFromSourceKm which is route-global.
          */
-        if (boardingPoint.getDistanceFromSourceKm()
-                .compareTo(droppingPoint.getDistanceFromSourceKm()) >= 0) {
-
-            throw new IllegalArgumentException(
-                    "Boarding point must be before dropping point"
-            );
+        BigDecimal bDist = boardingPoint.getDistanceFromSourceKm();
+        BigDecimal dDist = droppingPoint.getDistanceFromSourceKm();
+        
+        if (bDist != null && dDist != null) {
+            if (bDist.compareTo(dDist) > 0) {
+                throw new IllegalArgumentException(
+                        "Boarding point must be before dropping point"
+                );
+            }
         }
     }
 

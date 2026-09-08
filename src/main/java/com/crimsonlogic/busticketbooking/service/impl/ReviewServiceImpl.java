@@ -16,6 +16,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -54,6 +55,20 @@ public class ReviewServiceImpl implements ReviewService {
                                 "Booking not found"
                         )
                 );
+
+        /*
+         * A review can only be written after the journey is completed.
+         */
+        LocalDateTime arrivalDateTime = LocalDateTime.of(
+                booking.getTrip().getArrivalDate(),
+                booking.getTrip().getArrivalTime()
+        );
+
+        if (arrivalDateTime.isAfter(LocalDateTime.now())) {
+            throw new IllegalArgumentException(
+                    "You can only review a journey after it has been completed."
+            );
+        }
 
         /*
          * Only the user who made the booking
