@@ -10,6 +10,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class PaymentRequest {
 
-    @NotBlank
+    @NotBlank(message = "Payment method is required")
     private String paymentMethod;
+
+    private boolean useWallet;
 }

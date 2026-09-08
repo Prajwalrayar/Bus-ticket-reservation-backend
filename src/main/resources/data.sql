@@ -6,6 +6,8 @@
 
 SET FOREIGN_KEY_CHECKS = 0;
 
+TRUNCATE TABLE location_aliases;
+TRUNCATE TABLE locations;
 TRUNCATE TABLE booking_seats;
 TRUNCATE TABLE bookings;
 TRUNCATE TABLE payments;
@@ -22,6 +24,32 @@ TRUNCATE TABLE user_roles;
 TRUNCATE TABLE users;
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- =============================================================================
+-- LOCATIONS & ALIASES
+-- =============================================================================
+INSERT INTO locations (location_id, name, is_active, created_at, updated_at)
+VALUES
+  (1, 'Bengaluru', true, NOW(), NOW()),
+  (2, 'Mumbai', true, NOW(), NOW()),
+  (3, 'Pune', true, NOW(), NOW()),
+  (4, 'Belagavi', true, NOW(), NOW()),
+  (5, 'Hubballi', true, NOW(), NOW()),
+  (6, 'Dharwad', true, NOW(), NOW()),
+  (7, 'Kolhapur', true, NOW(), NOW()),
+  (8, 'Chennai', true, NOW(), NOW()),
+  (9, 'Hyderabad', true, NOW(), NOW()),
+  (10, 'Delhi', true, NOW(), NOW()),
+  (11, 'Jaipur', true, NOW(), NOW()),
+  (12, 'Coimbatore', true, NOW(), NOW()),
+  (13, 'Kolkata', true, NOW(), NOW()),
+  (14, 'Siliguri', true, NOW(), NOW());
+
+INSERT INTO location_aliases (alias_id, location_id, alias, is_active, created_at, updated_at)
+VALUES
+  (1, 1, 'Bangalore', true, NOW(), NOW()),
+  (2, 4, 'Belgaum', true, NOW(), NOW()),
+  (3, 5, 'Hubli', true, NOW(), NOW());
 
 -- =============================================================================
 -- USERS (password = BCrypt of "Test@1234")

@@ -11,13 +11,16 @@ import com.crimsonlogic.busticketbooking.enums.SeatStatus;
 import com.crimsonlogic.busticketbooking.repository.BookingRepository;
 import com.crimsonlogic.busticketbooking.repository.PaymentRepository;
 import com.crimsonlogic.busticketbooking.repository.TripSeatRepository;
+import com.crimsonlogic.busticketbooking.service.BookingService;
 import com.crimsonlogic.busticketbooking.service.PaymentService;
+import com.crimsonlogic.busticketbooking.service.WalletService;
 import com.crimsonlogic.busticketbooking.util.EntityIdGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Random;
@@ -33,6 +36,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final BookingRepository bookingRepository;
     private final TripSeatRepository tripSeatRepository;
     private final EntityIdGenerator entityIdGenerator;
+    private final WalletService walletService;
 
     private static final Random RANDOM = new Random();
 
@@ -55,7 +59,25 @@ public class PaymentServiceImpl implements PaymentService {
             throw new IllegalArgumentException("Booking already paid");
         }
 
-        Payment payment = buildPayment(booking, request.getPaymentMethod(), PaymentStatus.INITIATED);
+        BigDecimal walletAmountUsed = BigDecimal.ZERO;
+        BigDecimal gatewayAmount = booking.getTotalAmount();
+        String paymentMethod = request.getPaymentMethod();
+
+        if (request.isUseWallet()) {
+            BigDecimal walletBalance = walletService.getMyWallet().getBalance();
+            if (walletBalance.compareTo(BigDecimal.ZERO) > 0) {
+                if (walletBalance.compareTo(gatewayAmount) >= 0) {
+                    walletAmountUsed = gatewayAmount;
+                    gatewayAmount = BigDecimal.ZERO;
+                    paymentMethod = "WALLET";
+                } else {
+                    walletAmountUsed = walletBalance;
+                    gatewayAmount = gatewayAmount.subtract(walletBalance);
+                }
+            }
+        }
+
+        Payment payment = buildPayment(booking, paymentMethod, PaymentStatus.INITIATED, gatewayAmount, walletAmountUsed);
         Payment saved = paymentRepository.save(payment);
         return convertToDTO(saved);
     }
@@ -72,11 +94,30 @@ public class PaymentServiceImpl implements PaymentService {
             throw new IllegalArgumentException("Cannot pay for a cancelled booking");
         }
 
-        // 80% success simulation
+        // 80% success simulation (100% success if using WALLET only)
         boolean success = RANDOM.nextInt(10) < 8;
+        
+        BigDecimal walletAmountUsed = BigDecimal.ZERO;
+        BigDecimal gatewayAmount = booking.getTotalAmount();
+        String paymentMethod = request.getPaymentMethod();
 
-        Payment payment = buildPayment(booking, request.getPaymentMethod(),
-                success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
+        if (request.isUseWallet()) {
+            BigDecimal walletBalance = walletService.getMyWallet().getBalance();
+            if (walletBalance.compareTo(BigDecimal.ZERO) > 0) {
+                if (walletBalance.compareTo(gatewayAmount) >= 0) {
+                    walletAmountUsed = gatewayAmount;
+                    gatewayAmount = BigDecimal.ZERO;
+                    paymentMethod = "WALLET";
+                    success = true; // Wallet-only is always successful
+                } else {
+                    walletAmountUsed = walletBalance;
+                    gatewayAmount = gatewayAmount.subtract(walletBalance);
+                }
+            }
+        }
+
+        Payment payment = buildPayment(booking, paymentMethod,
+                success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED, gatewayAmount, walletAmountUsed);
         payment.setPaymentCompletedAt(LocalDateTime.now());
 
         if (success) {
@@ -94,6 +135,11 @@ public class PaymentServiceImpl implements PaymentService {
                     ts.setLockExpiryTime(null);
                     tripSeatRepository.save(ts);
                 });
+            }
+
+            // Deduct from wallet if used
+            if (walletAmountUsed.compareTo(BigDecimal.ZERO) > 0) {
+                walletService.deductBalance(booking.getBookedByUser().getUserId(), walletAmountUsed, bookingId);
             }
 
         } else {
@@ -147,14 +193,15 @@ public class PaymentServiceImpl implements PaymentService {
 
     // ── HELPERS ───────────────────────────────────────────────────────────────
 
-    private Payment buildPayment(Booking booking, String method, PaymentStatus status) {
+    private Payment buildPayment(Booking booking, String method, PaymentStatus status, BigDecimal gatewayAmount, BigDecimal walletAmountUsed) {
         Payment p = new Payment();
         p.setPaymentId(entityIdGenerator.generate(EntityIdGenerator.PREFIX_PAYMENT, paymentRepository::existsById));
         p.setTransactionReference(entityIdGenerator.generate(EntityIdGenerator.PREFIX_PAYMENT,
                 ref -> paymentRepository.findByTransactionReferenceIgnoreCase(ref).isPresent()));
         p.setPaymentMethod(method);
         p.setPaymentStatus(status);
-        p.setPaymentAmount(booking.getTotalAmount());
+        p.setPaymentAmount(gatewayAmount);
+        p.setWalletAmountUsed(walletAmountUsed);
         p.setPaymentInitiatedAt(LocalDateTime.now());
         p.setBooking(booking);
         return p;
@@ -168,6 +215,7 @@ public class PaymentServiceImpl implements PaymentService {
         dto.setPaymentMethod(payment.getPaymentMethod());
         dto.setPaymentStatus(payment.getPaymentStatus());
         dto.setPaymentAmount(payment.getPaymentAmount());
+        dto.setWalletAmountUsed(payment.getWalletAmountUsed());
         dto.setFailureReason(payment.getFailureReason());
         dto.setPaymentInitiatedAt(payment.getPaymentInitiatedAt());
         dto.setPaymentCompletedAt(payment.getPaymentCompletedAt());
