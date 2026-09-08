@@ -16,11 +16,11 @@ import java.time.LocalTime;
 @AllArgsConstructor
 public class TripSearchRequest {
 
-    @NotBlank
     private String source;
-
-    @NotBlank
     private String destination;
+
+    private Long fromLocationId;
+    private Long toLocationId;
 
     private LocalDate travelDate;
 

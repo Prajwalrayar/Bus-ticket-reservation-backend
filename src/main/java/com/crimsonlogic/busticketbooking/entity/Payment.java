@@ -106,14 +106,11 @@ public class Payment {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @ManyToOne(
-            fetch = FetchType.LAZY,
-            optional = false
-    )
-    @JoinColumn(
-            name = "booking_id",
-            nullable = false
-    )
+    @Column(name = "wallet_amount_used", precision = 10, scale = 2)
+    private BigDecimal walletAmountUsed = BigDecimal.ZERO;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "booking_id", nullable = false)
     private Booking booking;
 
     @PrePersist

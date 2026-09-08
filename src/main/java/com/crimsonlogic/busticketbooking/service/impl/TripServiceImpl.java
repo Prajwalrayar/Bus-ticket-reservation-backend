@@ -41,6 +41,7 @@ public class TripServiceImpl implements TripService {
     private final UserRepository userRepository;
     private final com.crimsonlogic.busticketbooking.repository.RouteStopRepository routeStopRepository;
     private final com.crimsonlogic.busticketbooking.repository.TripStopFareRepository tripStopFareRepository;
+    private final com.crimsonlogic.busticketbooking.service.LocationService locationService;
 
     /** Booking statuses that constitute an "active" booking. */
     private static final java.util.List<BookingStatus> ACTIVE_STATUSES =
@@ -342,20 +343,34 @@ public class TripServiceImpl implements TripService {
     public List<TripDTO> searchTrips(
             TripSearchRequest request) {
 
+        List<String> sourceNames;
+        if (request.getFromLocationId() != null) {
+            sourceNames = locationService.getAllNamesForLocationId(request.getFromLocationId());
+        } else {
+            sourceNames = java.util.List.of(request.getSource());
+        }
+
+        List<String> destinationNames;
+        if (request.getToLocationId() != null) {
+            destinationNames = locationService.getAllNamesForLocationId(request.getToLocationId());
+        } else {
+            destinationNames = java.util.List.of(request.getDestination());
+        }
+
         List<Trip> trips;
 
         if (request.getTravelDate() != null) {
             trips = tripRepository
                     .findByIntermediateStopsAndTravelDate(
-                            request.getSource(),
-                            request.getDestination(),
+                            sourceNames,
+                            destinationNames,
                             request.getTravelDate()
                     );
         } else {
             trips = tripRepository
                     .findByIntermediateStops(
-                            request.getSource(),
-                            request.getDestination()
+                            sourceNames,
+                            destinationNames
                     );
         }
 
@@ -447,16 +462,22 @@ public class TripServiceImpl implements TripService {
                         )
                 )
 
-                .map(trip -> convertToDTOWithDynamicFare(trip, request.getSource(), request.getDestination()))
+                .map(trip -> convertToDTOWithDynamicFare(trip, sourceNames, destinationNames))
                 .toList();
     }
 
-    private TripDTO convertToDTOWithDynamicFare(Trip trip, String searchSource, String searchDestination) {
+    private TripDTO convertToDTOWithDynamicFare(Trip trip, List<String> sourceNames, List<String> destinationNames) {
         TripDTO dto = convertToDTO(trip);
         
+        // Helper to check case-insensitive match against list
+        java.util.function.Predicate<String> matchesSource = s -> 
+                sourceNames.stream().anyMatch(name -> name.equalsIgnoreCase(s));
+        java.util.function.Predicate<String> matchesDest = s -> 
+                destinationNames.stream().anyMatch(name -> name.equalsIgnoreCase(s));
+
         // If exact source and destination match the route, baseFare is unchanged
-        if (trip.getRoute().getSource().equalsIgnoreCase(searchSource) && 
-            trip.getRoute().getDestination().equalsIgnoreCase(searchDestination)) {
+        if (matchesSource.test(trip.getRoute().getSource()) && 
+            matchesDest.test(trip.getRoute().getDestination())) {
             return dto;
         }
 
@@ -466,10 +487,10 @@ public class TripServiceImpl implements TripService {
             java.math.BigDecimal destFare = trip.getBaseFare();
 
             for (com.crimsonlogic.busticketbooking.entity.TripStopFare tsf : trip.getStopFares()) {
-                if (tsf.getRouteStop().getStopName().equalsIgnoreCase(searchSource)) {
+                if (matchesSource.test(tsf.getRouteStop().getStopName())) {
                     sourceFare = tsf.getFareFromSource();
                 }
-                if (tsf.getRouteStop().getStopName().equalsIgnoreCase(searchDestination)) {
+                if (matchesDest.test(tsf.getRouteStop().getStopName())) {
                     destFare = tsf.getFareFromSource();
                 }
             }
@@ -671,8 +692,8 @@ public class TripServiceImpl implements TripService {
 
         return tripRepository
                 .findByIntermediateStopsAndTravelDate(
-                        source,
-                        destination,
+                        java.util.List.of(source),
+                        java.util.List.of(destination),
                         travelDate
                 )
                 .stream()

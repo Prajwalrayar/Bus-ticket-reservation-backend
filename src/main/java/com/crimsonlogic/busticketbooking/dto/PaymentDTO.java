@@ -21,6 +21,8 @@ public class PaymentDTO {
 
     private String paymentMethod;
 
+    private BigDecimal walletAmountUsed;
+
     private PaymentStatus paymentStatus;
 
     private BigDecimal paymentAmount;

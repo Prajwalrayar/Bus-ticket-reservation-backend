@@ -64,6 +64,7 @@ public class EntityIdGenerator {
     public static final String PREFIX_NOTIFICATION    = "NTF";
     public static final String PREFIX_SAVED_PASSENGER = "SP";
     public static final String PREFIX_WALLET          = "WL";
+    public static final String PREFIX_WALLET_TRANSACTION = "WT";
     public static final String PREFIX_SEARCH_HISTORY  = "SH";
     public static final String PREFIX_USER_ROLE       = "UR";
     public static final String PREFIX_USER_SECURITY   = "US";
