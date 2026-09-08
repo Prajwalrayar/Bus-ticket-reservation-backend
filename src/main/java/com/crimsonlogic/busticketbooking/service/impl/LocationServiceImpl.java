@@ -58,4 +58,111 @@ public class LocationServiceImpl implements LocationService {
 
         return names;
     }
+
+    @Override
+    public List<com.crimsonlogic.busticketbooking.dto.AdminLocationDTO> getAllAdminLocations() {
+        return locationRepository.findAll().stream()
+                .map(loc -> new com.crimsonlogic.busticketbooking.dto.AdminLocationDTO(
+                        loc.getLocationId(), loc.getName(), loc.getIsActive(), loc.getCreatedAt(), loc.getUpdatedAt()))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public com.crimsonlogic.busticketbooking.dto.AdminLocationDTO createLocation(com.crimsonlogic.busticketbooking.dto.LocationCreateRequest request) {
+        String normalizedName = request.getName().trim();
+        if (locationRepository.existsByNameIgnoreCase(normalizedName)) {
+            throw new IllegalArgumentException("Location with this name already exists.");
+        }
+        Location loc = new Location();
+        loc.setName(normalizedName);
+        loc.setIsActive(true);
+        loc = locationRepository.save(loc);
+        return new com.crimsonlogic.busticketbooking.dto.AdminLocationDTO(
+                loc.getLocationId(), loc.getName(), loc.getIsActive(), loc.getCreatedAt(), loc.getUpdatedAt());
+    }
+
+    @Override
+    @Transactional
+    public com.crimsonlogic.busticketbooking.dto.AdminLocationDTO updateLocationName(Long locationId, com.crimsonlogic.busticketbooking.dto.LocationCreateRequest request) {
+        Location loc = locationRepository.findById(locationId)
+                .orElseThrow(() -> new com.crimsonlogic.busticketbooking.exception.ResourceNotFoundException("Location not found"));
+        String normalizedName = request.getName().trim();
+        if (!loc.getName().equalsIgnoreCase(normalizedName) && locationRepository.existsByNameIgnoreCase(normalizedName)) {
+            throw new IllegalArgumentException("Location with this name already exists.");
+        }
+        loc.setName(normalizedName);
+        loc = locationRepository.save(loc);
+        return new com.crimsonlogic.busticketbooking.dto.AdminLocationDTO(
+                loc.getLocationId(), loc.getName(), loc.getIsActive(), loc.getCreatedAt(), loc.getUpdatedAt());
+    }
+
+    @Override
+    @Transactional
+    public com.crimsonlogic.busticketbooking.dto.AdminLocationDTO updateLocationStatus(Long locationId, boolean isActive) {
+        Location loc = locationRepository.findById(locationId)
+                .orElseThrow(() -> new com.crimsonlogic.busticketbooking.exception.ResourceNotFoundException("Location not found"));
+        loc.setIsActive(isActive);
+        loc = locationRepository.save(loc);
+        return new com.crimsonlogic.busticketbooking.dto.AdminLocationDTO(
+                loc.getLocationId(), loc.getName(), loc.getIsActive(), loc.getCreatedAt(), loc.getUpdatedAt());
+    }
+
+    @Override
+    public List<com.crimsonlogic.busticketbooking.dto.AdminLocationAliasDTO> getAliasesForLocation(Long locationId) {
+        return locationAliasRepository.findByLocation_LocationId(locationId).stream()
+                .map(alias -> new com.crimsonlogic.busticketbooking.dto.AdminLocationAliasDTO(
+                        alias.getAliasId(), alias.getAlias(), alias.getIsActive(), alias.getCreatedAt(), alias.getUpdatedAt()))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public com.crimsonlogic.busticketbooking.dto.AdminLocationAliasDTO createAlias(Long locationId, com.crimsonlogic.busticketbooking.dto.LocationAliasCreateRequest request) {
+        Location loc = locationRepository.findById(locationId)
+                .orElseThrow(() -> new com.crimsonlogic.busticketbooking.exception.ResourceNotFoundException("Location not found"));
+        String normalizedAlias = request.getAlias().trim();
+        if (locationAliasRepository.existsByAliasIgnoreCase(normalizedAlias)) {
+            throw new IllegalArgumentException("Alias with this name already exists.");
+        }
+        if (loc.getName().equalsIgnoreCase(normalizedAlias)) {
+            throw new IllegalArgumentException("Alias cannot be the same as the canonical location name.");
+        }
+        LocationAlias alias = new LocationAlias();
+        alias.setLocation(loc);
+        alias.setAlias(normalizedAlias);
+        alias.setIsActive(true);
+        alias = locationAliasRepository.save(alias);
+        return new com.crimsonlogic.busticketbooking.dto.AdminLocationAliasDTO(
+                alias.getAliasId(), alias.getAlias(), alias.getIsActive(), alias.getCreatedAt(), alias.getUpdatedAt());
+    }
+
+    @Override
+    @Transactional
+    public com.crimsonlogic.busticketbooking.dto.AdminLocationAliasDTO updateAliasName(Long aliasId, com.crimsonlogic.busticketbooking.dto.LocationAliasCreateRequest request) {
+        LocationAlias alias = locationAliasRepository.findById(aliasId)
+                .orElseThrow(() -> new com.crimsonlogic.busticketbooking.exception.ResourceNotFoundException("Alias not found"));
+        String normalizedAlias = request.getAlias().trim();
+        if (!alias.getAlias().equalsIgnoreCase(normalizedAlias) && locationAliasRepository.existsByAliasIgnoreCase(normalizedAlias)) {
+            throw new IllegalArgumentException("Alias with this name already exists.");
+        }
+        if (alias.getLocation().getName().equalsIgnoreCase(normalizedAlias)) {
+            throw new IllegalArgumentException("Alias cannot be the same as the canonical location name.");
+        }
+        alias.setAlias(normalizedAlias);
+        alias = locationAliasRepository.save(alias);
+        return new com.crimsonlogic.busticketbooking.dto.AdminLocationAliasDTO(
+                alias.getAliasId(), alias.getAlias(), alias.getIsActive(), alias.getCreatedAt(), alias.getUpdatedAt());
+    }
+
+    @Override
+    @Transactional
+    public com.crimsonlogic.busticketbooking.dto.AdminLocationAliasDTO updateAliasStatus(Long aliasId, boolean isActive) {
+        LocationAlias alias = locationAliasRepository.findById(aliasId)
+                .orElseThrow(() -> new com.crimsonlogic.busticketbooking.exception.ResourceNotFoundException("Alias not found"));
+        alias.setIsActive(isActive);
+        alias = locationAliasRepository.save(alias);
+        return new com.crimsonlogic.busticketbooking.dto.AdminLocationAliasDTO(
+                alias.getAliasId(), alias.getAlias(), alias.getIsActive(), alias.getCreatedAt(), alias.getUpdatedAt());
+    }
 }

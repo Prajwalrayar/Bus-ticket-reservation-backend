@@ -14,4 +14,5 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
     @Query("SELECT l FROM Location l WHERE l.isActive = true AND (LOWER(l.name) LIKE LOWER(CONCAT(:query, '%')) OR l.locationId IN (SELECT la.location.locationId FROM LocationAlias la WHERE la.isActive = true AND LOWER(la.alias) LIKE LOWER(CONCAT(:query, '%'))))")
     List<Location> findByQuery(@Param("query") String query);
 
+    boolean existsByNameIgnoreCase(String name);
 }
