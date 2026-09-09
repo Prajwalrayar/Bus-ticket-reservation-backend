@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -38,9 +39,5 @@ public class TripCreateRequest {
     @DecimalMin(value = "0.01")
     private BigDecimal baseFare;
 
-    private java.util.Map<String, BigDecimal> stopFares;
-
-    private java.util.Map<String, LocalTime> stopTimes;
-
-    private java.util.Map<String, LocalDate> stopDates;
+    private List<TripSegmentCreateRequest> segments;
 }

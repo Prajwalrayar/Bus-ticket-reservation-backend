@@ -275,23 +275,14 @@ public class BookingServiceImpl implements BookingService {
                 }
             }
 
-            // Fallback: TripStopFare diff
-            if (!fareResolvedViaFareLocation && trip.getStopFares() != null && !trip.getStopFares().isEmpty()) {
-                BigDecimal sourceFare = BigDecimal.ZERO;
-                BigDecimal destFare = trip.getBaseFare();
-
-                for (com.crimsonlogic.busticketbooking.entity.TripStopFare tsf : trip.getStopFares()) {
-                    if (tsf.getRouteStop().getRouteStopId().equals(boardingPoint.getRouteStopId())) {
-                        sourceFare = tsf.getFareFromSource();
+            // Fallback: TripSegment lookup
+            if (!fareResolvedViaFareLocation && trip.getTripSegments() != null && !trip.getTripSegments().isEmpty()) {
+                for (com.crimsonlogic.busticketbooking.entity.TripSegment ts : trip.getTripSegments()) {
+                    if (ts.getBoardingStop().getRouteStopId().equals(boardingPoint.getRouteStopId()) &&
+                        ts.getDroppingStop().getRouteStopId().equals(droppingPoint.getRouteStopId())) {
+                        seatFare = ts.getFare();
+                        break;
                     }
-                    if (tsf.getRouteStop().getRouteStopId().equals(droppingPoint.getRouteStopId())) {
-                        destFare = tsf.getFareFromSource();
-                    }
-                }
-
-                BigDecimal segmentFare = destFare.subtract(sourceFare);
-                if (segmentFare.compareTo(BigDecimal.ZERO) > 0) {
-                    seatFare = segmentFare;
                 }
             }
 

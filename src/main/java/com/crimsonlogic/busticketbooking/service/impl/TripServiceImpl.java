@@ -40,7 +40,7 @@ public class TripServiceImpl implements TripService {
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
     private final com.crimsonlogic.busticketbooking.repository.RouteStopRepository routeStopRepository;
-    private final com.crimsonlogic.busticketbooking.repository.TripStopFareRepository tripStopFareRepository;
+    private final com.crimsonlogic.busticketbooking.repository.TripSegmentRepository tripSegmentRepository;
     private final com.crimsonlogic.busticketbooking.service.LocationService locationService;
 
     /** Booking statuses that constitute an "active" booking. */
@@ -136,18 +136,15 @@ public class TripServiceImpl implements TripService {
         java.time.LocalTime derivedArrival = request.getArrivalTime();
         java.time.LocalDate derivedArrivalDate = request.getArrivalDate();
 
-        if (request.getStopTimes() != null && !orderedStops.isEmpty()) {
+        if (request.getSegments() != null && !request.getSegments().isEmpty()) {
             if (derivedDeparture == null) {
-                String firstId = orderedStops.get(0).getRouteStopId();
-                derivedDeparture = request.getStopTimes().get(firstId);
+                derivedDeparture = request.getSegments().get(0).getDepartureTime();
             }
             if (derivedArrival == null) {
-                String lastId = orderedStops.get(orderedStops.size() - 1).getRouteStopId();
-                derivedArrival = request.getStopTimes().get(lastId);
+                derivedArrival = request.getSegments().get(request.getSegments().size() - 1).getArrivalTime();
             }
-            if (derivedArrivalDate == null && request.getStopDates() != null) {
-                String lastId = orderedStops.get(orderedStops.size() - 1).getRouteStopId();
-                derivedArrivalDate = request.getStopDates().get(lastId);
+            if (derivedArrivalDate == null) {
+                derivedArrivalDate = request.getSegments().get(request.getSegments().size() - 1).getArrivalDate();
             }
         }
 
@@ -184,41 +181,31 @@ public class TripServiceImpl implements TripService {
 
         tripSeatRepository.saveAll(tripSeats);
 
-        // Save TripStopFares
-        java.util.List<com.crimsonlogic.busticketbooking.entity.TripStopFare> faresToSave = new java.util.ArrayList<>();
-        java.util.List<com.crimsonlogic.busticketbooking.entity.RouteStop> routeStops = route.getRouteStops();
-        
-        for (com.crimsonlogic.busticketbooking.entity.RouteStop routeStop : routeStops) {
-            com.crimsonlogic.busticketbooking.entity.TripStopFare tsf = new com.crimsonlogic.busticketbooking.entity.TripStopFare();
-            tsf.setTrip(savedTrip);
-            tsf.setRouteStop(routeStop);
-            
-            // Check if explicitly provided in request
-            if (request.getStopFares() != null && request.getStopFares().containsKey(routeStop.getRouteStopId())) {
-                tsf.setFareFromSource(request.getStopFares().get(routeStop.getRouteStopId()));
-            } else {
-                // Ultimate fallback
-                tsf.setFareFromSource(java.math.BigDecimal.ZERO);
-            }
+        // Save TripSegments
+        java.util.List<com.crimsonlogic.busticketbooking.entity.TripSegment> segmentsToSave = new java.util.ArrayList<>();
+        if (request.getSegments() != null) {
+            for (com.crimsonlogic.busticketbooking.dto.TripSegmentCreateRequest segReq : request.getSegments()) {
+                com.crimsonlogic.busticketbooking.entity.RouteStop bStop = routeStopRepository.findById(segReq.getBoardingStopId())
+                        .orElseThrow(() -> new IllegalArgumentException("Boarding stop not found"));
+                com.crimsonlogic.busticketbooking.entity.RouteStop dStop = routeStopRepository.findById(segReq.getDroppingStopId())
+                        .orElseThrow(() -> new IllegalArgumentException("Dropping stop not found"));
 
-            if (request.getStopTimes() != null && request.getStopTimes().containsKey(routeStop.getRouteStopId())) {
-                tsf.setStopTime(request.getStopTimes().get(routeStop.getRouteStopId()));
-            } else {
-                tsf.setStopTime(java.time.LocalTime.MIDNIGHT);
+                com.crimsonlogic.busticketbooking.entity.TripSegment ts = new com.crimsonlogic.busticketbooking.entity.TripSegment();
+                ts.setTrip(savedTrip);
+                ts.setBoardingStop(bStop);
+                ts.setDroppingStop(dStop);
+                ts.setDepartureTime(segReq.getDepartureTime());
+                ts.setArrivalTime(segReq.getArrivalTime());
+                ts.setDepartureDate(segReq.getDepartureDate() != null ? segReq.getDepartureDate() : savedTrip.getTravelDate());
+                ts.setArrivalDate(segReq.getArrivalDate() != null ? segReq.getArrivalDate() : savedTrip.getTravelDate());
+                ts.setFare(segReq.getFare());
+                segmentsToSave.add(ts);
             }
-
-            if (request.getStopDates() != null && request.getStopDates().containsKey(routeStop.getRouteStopId())) {
-                tsf.setStopDate(request.getStopDates().get(routeStop.getRouteStopId()));
-            } else {
-                tsf.setStopDate(savedTrip.getTravelDate());
-            }
-
-            faresToSave.add(tsf);
         }
-        
-        if (!faresToSave.isEmpty()) {
-            tripStopFareRepository.saveAll(faresToSave);
-            savedTrip.setStopFares(faresToSave);
+
+        if (!segmentsToSave.isEmpty()) {
+            tripSegmentRepository.saveAll(segmentsToSave);
+            savedTrip.setTripSegments(segmentsToSave);
         }
 
         return convertToDTO(savedTrip);
@@ -349,43 +336,33 @@ public class TripServiceImpl implements TripService {
 
         Trip savedTrip = tripRepository.save(trip);
 
-        // Delete existing fares first (simplified update)
-        tripStopFareRepository.deleteAll(tripStopFareRepository.findByTrip_TripId(savedTrip.getTripId()));
+        // Delete existing segments first
+        tripSegmentRepository.deleteAll(tripSegmentRepository.findByTrip_TripId(savedTrip.getTripId()));
         
-        java.util.List<com.crimsonlogic.busticketbooking.entity.TripStopFare> faresToSave = new java.util.ArrayList<>();
-        java.util.List<com.crimsonlogic.busticketbooking.entity.RouteStop> routeStops = route.getRouteStops();
-        
-        for (com.crimsonlogic.busticketbooking.entity.RouteStop routeStop : routeStops) {
-            com.crimsonlogic.busticketbooking.entity.TripStopFare tsf = new com.crimsonlogic.busticketbooking.entity.TripStopFare();
-            tsf.setTrip(savedTrip);
-            tsf.setRouteStop(routeStop);
-            
-            // Check if explicitly provided in request
-            if (request.getStopFares() != null && request.getStopFares().containsKey(routeStop.getRouteStopId())) {
-                tsf.setFareFromSource(request.getStopFares().get(routeStop.getRouteStopId()));
-            } else {
-                // Ultimate fallback
-                tsf.setFareFromSource(java.math.BigDecimal.ZERO);
-            }
+        java.util.List<com.crimsonlogic.busticketbooking.entity.TripSegment> segmentsToSave = new java.util.ArrayList<>();
+        if (request.getSegments() != null) {
+            for (com.crimsonlogic.busticketbooking.dto.TripSegmentCreateRequest segReq : request.getSegments()) {
+                com.crimsonlogic.busticketbooking.entity.RouteStop bStop = routeStopRepository.findById(segReq.getBoardingStopId())
+                        .orElseThrow(() -> new IllegalArgumentException("Boarding stop not found"));
+                com.crimsonlogic.busticketbooking.entity.RouteStop dStop = routeStopRepository.findById(segReq.getDroppingStopId())
+                        .orElseThrow(() -> new IllegalArgumentException("Dropping stop not found"));
 
-            if (request.getStopTimes() != null && request.getStopTimes().containsKey(routeStop.getRouteStopId())) {
-                tsf.setStopTime(request.getStopTimes().get(routeStop.getRouteStopId()));
-            } else {
-                tsf.setStopTime(java.time.LocalTime.MIDNIGHT);
+                com.crimsonlogic.busticketbooking.entity.TripSegment ts = new com.crimsonlogic.busticketbooking.entity.TripSegment();
+                ts.setTrip(savedTrip);
+                ts.setBoardingStop(bStop);
+                ts.setDroppingStop(dStop);
+                ts.setDepartureTime(segReq.getDepartureTime());
+                ts.setArrivalTime(segReq.getArrivalTime());
+                ts.setDepartureDate(segReq.getDepartureDate() != null ? segReq.getDepartureDate() : savedTrip.getTravelDate());
+                ts.setArrivalDate(segReq.getArrivalDate() != null ? segReq.getArrivalDate() : savedTrip.getTravelDate());
+                ts.setFare(segReq.getFare());
+                segmentsToSave.add(ts);
             }
-
-            if (request.getStopDates() != null && request.getStopDates().containsKey(routeStop.getRouteStopId())) {
-                tsf.setStopDate(request.getStopDates().get(routeStop.getRouteStopId()));
-            } else {
-                tsf.setStopDate(savedTrip.getTravelDate());
-            }
-
-            faresToSave.add(tsf);
         }
         
-        if (!faresToSave.isEmpty()) {
-            tripStopFareRepository.saveAll(faresToSave);
-            savedTrip.setStopFares(faresToSave);
+        if (!segmentsToSave.isEmpty()) {
+            tripSegmentRepository.saveAll(segmentsToSave);
+            savedTrip.setTripSegments(segmentsToSave);
         }
 
         return convertToDTO(savedTrip);
@@ -534,23 +511,14 @@ public class TripServiceImpl implements TripService {
             return dto;
         }
 
-        // Otherwise, calculate dynamic fare based on TripStopFares
-        if (trip.getStopFares() != null && !trip.getStopFares().isEmpty()) {
-            java.math.BigDecimal sourceFare = java.math.BigDecimal.ZERO;
-            java.math.BigDecimal destFare = trip.getBaseFare();
-
-            for (com.crimsonlogic.busticketbooking.entity.TripStopFare tsf : trip.getStopFares()) {
-                if (matchesSource.test(tsf.getRouteStop().getStopName())) {
-                    sourceFare = tsf.getFareFromSource();
+        // Otherwise, calculate dynamic fare based on TripSegments
+        if (trip.getTripSegments() != null && !trip.getTripSegments().isEmpty()) {
+            for (com.crimsonlogic.busticketbooking.entity.TripSegment ts : trip.getTripSegments()) {
+                if (matchesSource.test(ts.getBoardingStop().getStopName()) &&
+                    matchesDest.test(ts.getDroppingStop().getStopName())) {
+                    dto.setBaseFare(ts.getFare());
+                    break;
                 }
-                if (matchesDest.test(tsf.getRouteStop().getStopName())) {
-                    destFare = tsf.getFareFromSource();
-                }
-            }
-
-            java.math.BigDecimal dynamicFare = destFare.subtract(sourceFare);
-            if (dynamicFare.compareTo(java.math.BigDecimal.ZERO) > 0) {
-                dto.setBaseFare(dynamicFare);
             }
         }
         
@@ -943,28 +911,32 @@ public class TripServiceImpl implements TripService {
             dto.setAvailableSeats((int) available);
         }
 
-        if (trip.getStopFares() != null && !trip.getStopFares().isEmpty()) {
-            dto.setStopFares(trip.getStopFares().stream().map(tsf -> {
-                com.crimsonlogic.busticketbooking.dto.TripStopFareDTO tsfDTO = new com.crimsonlogic.busticketbooking.dto.TripStopFareDTO();
-                tsfDTO.setRouteStopId(tsf.getRouteStop().getRouteStopId());
-                tsfDTO.setStopName(tsf.getRouteStop().getStopName());
-                tsfDTO.setFareFromSource(tsf.getFareFromSource());
-                tsfDTO.setStopSequence(tsf.getRouteStop().getStopSequence());
-                tsfDTO.setStopType(tsf.getRouteStop().getStopType() != null ? tsf.getRouteStop().getStopType().name() : null);
-                tsfDTO.setStopTime(tsf.getStopTime());
-                tsfDTO.setStopDate(tsf.getStopDate());
-                // FareLocation
-                if (tsf.getRouteStop().getFareLocation() != null) {
-                    tsfDTO.setFareLocationId(tsf.getRouteStop().getFareLocation().getFareLocationId());
-                    tsfDTO.setFareLocationName(tsf.getRouteStop().getFareLocation().getName());
+        if (trip.getTripSegments() != null && !trip.getTripSegments().isEmpty()) {
+            dto.setSegments(trip.getTripSegments().stream().map(ts -> {
+                com.crimsonlogic.busticketbooking.dto.TripSegmentDTO tsDTO = new com.crimsonlogic.busticketbooking.dto.TripSegmentDTO();
+                tsDTO.setId(ts.getId());
+                tsDTO.setTripId(ts.getTrip().getTripId());
+                tsDTO.setBoardingStopId(ts.getBoardingStop().getRouteStopId());
+                tsDTO.setBoardingStopName(ts.getBoardingStop().getStopName());
+                if (ts.getBoardingStop().getFareLocation() != null) {
+                    tsDTO.setBoardingZoneName(ts.getBoardingStop().getFareLocation().getName());
                 }
-                // Boarding / dropping flags
-                tsfDTO.setCanBoard(tsf.getRouteStop().getCanBoard());
-                tsfDTO.setCanDrop(tsf.getRouteStop().getCanDrop());
-                return tsfDTO;
+                tsDTO.setDepartureTime(ts.getDepartureTime());
+                tsDTO.setDepartureDate(ts.getDepartureDate());
+
+                tsDTO.setDroppingStopId(ts.getDroppingStop().getRouteStopId());
+                tsDTO.setDroppingStopName(ts.getDroppingStop().getStopName());
+                if (ts.getDroppingStop().getFareLocation() != null) {
+                    tsDTO.setDroppingZoneName(ts.getDroppingStop().getFareLocation().getName());
+                }
+                tsDTO.setArrivalTime(ts.getArrivalTime());
+                tsDTO.setArrivalDate(ts.getArrivalDate());
+
+                tsDTO.setFare(ts.getFare());
+                return tsDTO;
             }).toList());
         } else {
-            dto.setStopFares(new java.util.ArrayList<>());
+            dto.setSegments(new java.util.ArrayList<>());
         }
 
         return dto;
