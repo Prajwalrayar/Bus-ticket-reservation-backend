@@ -21,6 +21,10 @@ public interface BookingRepository extends JpaRepository<Booking, String> {
             String userId
     );
 
+    List<Booking> findByTrip_TripId(
+            String tripId
+    );
+
     long countByBookingStatus(BookingStatus bookingStatus);
 
     long countByTrip_Route_RouteIdAndBookingStatus(

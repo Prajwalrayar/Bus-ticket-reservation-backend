@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalTime;
 
 @Data
 @NoArgsConstructor
@@ -20,4 +22,8 @@ public class TripStopFareDTO {
     private Integer stopSequence;
     
     private String stopType;
+    
+    private LocalTime stopTime;
+    
+    private LocalDate stopDate;
 }

@@ -28,13 +28,10 @@ public class TripCreateRequest {
     @NotNull
     private LocalDate travelDate;
 
-    @NotNull
     private LocalTime departureTime;
 
-    @NotNull
     private LocalDate arrivalDate;
 
-    @NotNull
     private LocalTime arrivalTime;
 
     @NotNull
@@ -42,4 +39,8 @@ public class TripCreateRequest {
     private BigDecimal baseFare;
 
     private java.util.Map<String, BigDecimal> stopFares;
+
+    private java.util.Map<String, LocalTime> stopTimes;
+
+    private java.util.Map<String, LocalDate> stopDates;
 }

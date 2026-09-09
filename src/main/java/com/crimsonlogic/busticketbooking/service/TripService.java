@@ -58,4 +58,9 @@ public interface TripService {
 
     /** Back-fills TripSeat rows for any trip that currently has none. */
     int backfillTripSeats();
+
+    /**
+     * Get passenger analytics for a trip.
+     */
+    List<com.crimsonlogic.busticketbooking.dto.PassengerAnalyticsDTO> getTripPassengers(String tripId);
 }
