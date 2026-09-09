@@ -28,7 +28,7 @@ public class TripDTO {
 
     private BigDecimal baseFare;
 
-    private List<TripStopFareDTO> stopFares;
+    private List<TripSegmentDTO> segments;
 
     private Boolean isCancelled;
 

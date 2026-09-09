@@ -165,7 +165,7 @@ public class Trip {
             cascade = CascadeType.ALL,
             orphanRemoval = true
     )
-    private List<TripStopFare> stopFares = new ArrayList<>();
+    private List<TripSegment> tripSegments = new ArrayList<>();
 
     @PrePersist
     protected void generateId() {
