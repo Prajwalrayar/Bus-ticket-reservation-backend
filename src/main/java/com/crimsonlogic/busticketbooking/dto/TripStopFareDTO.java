@@ -26,4 +26,12 @@ public class TripStopFareDTO {
     private LocalTime stopTime;
     
     private LocalDate stopDate;
+
+    private String fareLocationId;
+
+    private String fareLocationName;
+
+    private Boolean canBoard;
+
+    private Boolean canDrop;
 }

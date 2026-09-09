@@ -25,4 +25,12 @@ public class RouteStopDTO {
     private String source;
 
     private String destination;
+
+    private String fareLocationId;
+
+    private String fareLocationName;
+
+    private Boolean canBoard;
+
+    private Boolean canDrop;
 }

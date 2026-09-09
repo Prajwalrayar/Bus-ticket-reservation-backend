@@ -62,6 +62,30 @@ public class RouteStop {
     private BigDecimal distanceFromSourceKm;
 
     /*
+     * Optional grouping of this physical stop into a logical fare zone.
+     * Multiple physical stops can share the same FareLocation.
+     * Null means no fare-zone grouping is configured for this stop.
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "fare_location_id", nullable = true)
+    private FareLocation fareLocation;
+
+    /*
+     * Whether passengers may board at this stop.
+     * Defaults to true. The operator can disable boarding at a stop
+     * without removing the stop from the route.
+     */
+    @Column(name = "can_board", nullable = false)
+    private Boolean canBoard = true;
+
+    /*
+     * Whether passengers may alight at this stop.
+     * Defaults to true.
+     */
+    @Column(name = "can_drop", nullable = false)
+    private Boolean canDrop = true;
+
+    /*
      * Each route stop belongs to exactly one route.
      * One route can contain multiple stops.
      */
