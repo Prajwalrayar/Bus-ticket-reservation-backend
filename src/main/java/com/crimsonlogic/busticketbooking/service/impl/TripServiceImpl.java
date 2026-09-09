@@ -125,17 +125,35 @@ public class TripServiceImpl implements TripService {
                 request.getTravelDate()
         );
 
-        trip.setDepartureTime(
-                request.getDepartureTime()
-        );
+        // Auto-derive departure/arrival from stopTimes if not explicitly provided
+        java.util.List<com.crimsonlogic.busticketbooking.entity.RouteStop> orderedStops =
+                route.getRouteStops().stream()
+                        .sorted(java.util.Comparator.comparingInt(
+                                com.crimsonlogic.busticketbooking.entity.RouteStop::getStopSequence))
+                        .toList();
 
-        trip.setArrivalTime(
-                request.getArrivalTime()
-        );
+        java.time.LocalTime derivedDeparture = request.getDepartureTime();
+        java.time.LocalTime derivedArrival = request.getArrivalTime();
+        java.time.LocalDate derivedArrivalDate = request.getArrivalDate();
 
-        trip.setArrivalDate(
-                request.getArrivalDate()
-        );
+        if (request.getStopTimes() != null && !orderedStops.isEmpty()) {
+            if (derivedDeparture == null) {
+                String firstId = orderedStops.get(0).getRouteStopId();
+                derivedDeparture = request.getStopTimes().get(firstId);
+            }
+            if (derivedArrival == null) {
+                String lastId = orderedStops.get(orderedStops.size() - 1).getRouteStopId();
+                derivedArrival = request.getStopTimes().get(lastId);
+            }
+            if (derivedArrivalDate == null && request.getStopDates() != null) {
+                String lastId = orderedStops.get(orderedStops.size() - 1).getRouteStopId();
+                derivedArrivalDate = request.getStopDates().get(lastId);
+            }
+        }
+
+        trip.setDepartureTime(derivedDeparture);
+        trip.setArrivalTime(derivedArrival);
+        trip.setArrivalDate(derivedArrivalDate != null ? derivedArrivalDate : request.getTravelDate());
 
         trip.setBaseFare(
                 request.getBaseFare()
@@ -166,23 +184,41 @@ public class TripServiceImpl implements TripService {
 
         tripSeatRepository.saveAll(tripSeats);
 
-        // Save TripStopFares if provided
-        if (request.getStopFares() != null && !request.getStopFares().isEmpty()) {
-            java.util.List<com.crimsonlogic.busticketbooking.entity.TripStopFare> faresToSave = new java.util.ArrayList<>();
-            for (java.util.Map.Entry<String, java.math.BigDecimal> entry : request.getStopFares().entrySet()) {
-                com.crimsonlogic.busticketbooking.entity.RouteStop routeStop = routeStopRepository.findById(entry.getKey()).orElse(null);
-                if (routeStop != null && routeStop.getRoute().getRouteId().equals(route.getRouteId())) {
-                    com.crimsonlogic.busticketbooking.entity.TripStopFare tsf = new com.crimsonlogic.busticketbooking.entity.TripStopFare();
-                    tsf.setTrip(savedTrip);
-                    tsf.setRouteStop(routeStop);
-                    tsf.setFareFromSource(entry.getValue());
-                    faresToSave.add(tsf);
-                }
+        // Save TripStopFares
+        java.util.List<com.crimsonlogic.busticketbooking.entity.TripStopFare> faresToSave = new java.util.ArrayList<>();
+        java.util.List<com.crimsonlogic.busticketbooking.entity.RouteStop> routeStops = route.getRouteStops();
+        
+        for (com.crimsonlogic.busticketbooking.entity.RouteStop routeStop : routeStops) {
+            com.crimsonlogic.busticketbooking.entity.TripStopFare tsf = new com.crimsonlogic.busticketbooking.entity.TripStopFare();
+            tsf.setTrip(savedTrip);
+            tsf.setRouteStop(routeStop);
+            
+            // Check if explicitly provided in request
+            if (request.getStopFares() != null && request.getStopFares().containsKey(routeStop.getRouteStopId())) {
+                tsf.setFareFromSource(request.getStopFares().get(routeStop.getRouteStopId()));
+            } else {
+                // Ultimate fallback
+                tsf.setFareFromSource(java.math.BigDecimal.ZERO);
             }
-            if (!faresToSave.isEmpty()) {
-                tripStopFareRepository.saveAll(faresToSave);
-                savedTrip.setStopFares(faresToSave);
+
+            if (request.getStopTimes() != null && request.getStopTimes().containsKey(routeStop.getRouteStopId())) {
+                tsf.setStopTime(request.getStopTimes().get(routeStop.getRouteStopId()));
+            } else {
+                tsf.setStopTime(java.time.LocalTime.MIDNIGHT);
             }
+
+            if (request.getStopDates() != null && request.getStopDates().containsKey(routeStop.getRouteStopId())) {
+                tsf.setStopDate(request.getStopDates().get(routeStop.getRouteStopId()));
+            } else {
+                tsf.setStopDate(savedTrip.getTravelDate());
+            }
+
+            faresToSave.add(tsf);
+        }
+        
+        if (!faresToSave.isEmpty()) {
+            tripStopFareRepository.saveAll(faresToSave);
+            savedTrip.setStopFares(faresToSave);
         }
 
         return convertToDTO(savedTrip);
@@ -313,26 +349,43 @@ public class TripServiceImpl implements TripService {
 
         Trip savedTrip = tripRepository.save(trip);
 
-        // Update TripStopFares if provided
-        if (request.getStopFares() != null) {
-            // Delete existing fares first (simplified update)
-            tripStopFareRepository.deleteAll(tripStopFareRepository.findByTrip_TripId(savedTrip.getTripId()));
+        // Delete existing fares first (simplified update)
+        tripStopFareRepository.deleteAll(tripStopFareRepository.findByTrip_TripId(savedTrip.getTripId()));
+        
+        java.util.List<com.crimsonlogic.busticketbooking.entity.TripStopFare> faresToSave = new java.util.ArrayList<>();
+        java.util.List<com.crimsonlogic.busticketbooking.entity.RouteStop> routeStops = route.getRouteStops();
+        
+        for (com.crimsonlogic.busticketbooking.entity.RouteStop routeStop : routeStops) {
+            com.crimsonlogic.busticketbooking.entity.TripStopFare tsf = new com.crimsonlogic.busticketbooking.entity.TripStopFare();
+            tsf.setTrip(savedTrip);
+            tsf.setRouteStop(routeStop);
             
-            java.util.List<com.crimsonlogic.busticketbooking.entity.TripStopFare> faresToSave = new java.util.ArrayList<>();
-            for (java.util.Map.Entry<String, java.math.BigDecimal> entry : request.getStopFares().entrySet()) {
-                com.crimsonlogic.busticketbooking.entity.RouteStop routeStop = routeStopRepository.findById(entry.getKey()).orElse(null);
-                if (routeStop != null && routeStop.getRoute().getRouteId().equals(route.getRouteId())) {
-                    com.crimsonlogic.busticketbooking.entity.TripStopFare tsf = new com.crimsonlogic.busticketbooking.entity.TripStopFare();
-                    tsf.setTrip(savedTrip);
-                    tsf.setRouteStop(routeStop);
-                    tsf.setFareFromSource(entry.getValue());
-                    faresToSave.add(tsf);
-                }
+            // Check if explicitly provided in request
+            if (request.getStopFares() != null && request.getStopFares().containsKey(routeStop.getRouteStopId())) {
+                tsf.setFareFromSource(request.getStopFares().get(routeStop.getRouteStopId()));
+            } else {
+                // Ultimate fallback
+                tsf.setFareFromSource(java.math.BigDecimal.ZERO);
             }
-            if (!faresToSave.isEmpty()) {
-                tripStopFareRepository.saveAll(faresToSave);
-                savedTrip.setStopFares(faresToSave);
+
+            if (request.getStopTimes() != null && request.getStopTimes().containsKey(routeStop.getRouteStopId())) {
+                tsf.setStopTime(request.getStopTimes().get(routeStop.getRouteStopId()));
+            } else {
+                tsf.setStopTime(java.time.LocalTime.MIDNIGHT);
             }
+
+            if (request.getStopDates() != null && request.getStopDates().containsKey(routeStop.getRouteStopId())) {
+                tsf.setStopDate(request.getStopDates().get(routeStop.getRouteStopId()));
+            } else {
+                tsf.setStopDate(savedTrip.getTravelDate());
+            }
+
+            faresToSave.add(tsf);
+        }
+        
+        if (!faresToSave.isEmpty()) {
+            tripStopFareRepository.saveAll(faresToSave);
+            savedTrip.setStopFares(faresToSave);
         }
 
         return convertToDTO(savedTrip);
@@ -780,6 +833,34 @@ public class TripServiceImpl implements TripService {
         return true;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.crimsonlogic.busticketbooking.dto.PassengerAnalyticsDTO> getTripPassengers(String tripId) {
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new IllegalArgumentException("Trip not found"));
+        authorizeOperatorForBus(trip.getBus());
+
+        java.util.List<com.crimsonlogic.busticketbooking.entity.Booking> bookings = bookingRepository.findByTrip_TripId(tripId);
+        java.util.List<com.crimsonlogic.busticketbooking.dto.PassengerAnalyticsDTO> analytics = new java.util.ArrayList<>();
+
+        for (com.crimsonlogic.busticketbooking.entity.Booking booking : bookings) {
+            if (booking.getBookingStatus() == BookingStatus.CONFIRMED || booking.getBookingStatus() == BookingStatus.PENDING) {
+                for (com.crimsonlogic.busticketbooking.entity.BookingSeat seat : booking.getBookingSeats()) {
+                    com.crimsonlogic.busticketbooking.dto.PassengerAnalyticsDTO dto = new com.crimsonlogic.busticketbooking.dto.PassengerAnalyticsDTO();
+                    dto.setPassengerName(seat.getPassengerName());
+                    dto.setAge(seat.getPassengerAge());
+                    dto.setGender(seat.getPassengerGender());
+                    dto.setSeatNumber(seat.getTripSeat().getBusSeat().getSeatNumber());
+                    dto.setBoardingPoint(booking.getBoardingPoint() != null ? booking.getBoardingPoint().getStopName() : null);
+                    dto.setDroppingPoint(booking.getDroppingPoint() != null ? booking.getDroppingPoint().getStopName() : null);
+                    dto.setBookingReference(booking.getBookingReference());
+                    analytics.add(dto);
+                }
+            }
+        }
+        return analytics;
+    }
+
     private TripDTO convertToDTO(
             Trip trip) {
 
@@ -870,6 +951,8 @@ public class TripServiceImpl implements TripService {
                 tsfDTO.setFareFromSource(tsf.getFareFromSource());
                 tsfDTO.setStopSequence(tsf.getRouteStop().getStopSequence());
                 tsfDTO.setStopType(tsf.getRouteStop().getStopType() != null ? tsf.getRouteStop().getStopType().name() : null);
+                tsfDTO.setStopTime(tsf.getStopTime());
+                tsfDTO.setStopDate(tsf.getStopDate());
                 return tsfDTO;
             }).toList());
         } else {

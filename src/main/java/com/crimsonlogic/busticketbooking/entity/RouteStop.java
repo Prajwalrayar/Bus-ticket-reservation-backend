@@ -56,7 +56,8 @@ public class RouteStop {
     @Column(
             name = "distance_from_source_km",
             precision = 8,
-            scale = 2
+            scale = 2,
+            nullable = false
     )
     private BigDecimal distanceFromSourceKm;
 

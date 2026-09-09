@@ -7,7 +7,9 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @Entity
 @Table(name = "trip_stop_fares", uniqueConstraints = {
@@ -32,6 +34,12 @@ public class TripStopFare {
 
     @Column(precision = 8, scale = 2, nullable = false)
     private BigDecimal fareFromSource;
+
+    @Column(name = "stop_time")
+    private LocalTime stopTime;
+
+    @Column(name = "stop_date")
+    private LocalDate stopDate;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

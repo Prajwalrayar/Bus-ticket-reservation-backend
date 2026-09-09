@@ -205,4 +205,19 @@ public class TripController {
                 ApiResponse.success("Back-filled seats for " + tripsFixed + " trip(s).")
         );
     }
+
+    /**
+     * Get passenger analytics for a trip.
+     */
+    @GetMapping("/{tripId}/passengers")
+    @PreAuthorize("hasAnyRole('BUS_OPERATOR', 'ADMIN')")
+    public ResponseEntity<ApiResponse<List<com.crimsonlogic.busticketbooking.dto.PassengerAnalyticsDTO>>> getTripPassengers(
+            @PathVariable String tripId) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        tripService.getTripPassengers(tripId)
+                )
+        );
+    }
 }
