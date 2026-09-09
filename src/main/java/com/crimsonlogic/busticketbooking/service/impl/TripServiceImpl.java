@@ -953,6 +953,14 @@ public class TripServiceImpl implements TripService {
                 tsfDTO.setStopType(tsf.getRouteStop().getStopType() != null ? tsf.getRouteStop().getStopType().name() : null);
                 tsfDTO.setStopTime(tsf.getStopTime());
                 tsfDTO.setStopDate(tsf.getStopDate());
+                // FareLocation
+                if (tsf.getRouteStop().getFareLocation() != null) {
+                    tsfDTO.setFareLocationId(tsf.getRouteStop().getFareLocation().getFareLocationId());
+                    tsfDTO.setFareLocationName(tsf.getRouteStop().getFareLocation().getName());
+                }
+                // Boarding / dropping flags
+                tsfDTO.setCanBoard(tsf.getRouteStop().getCanBoard());
+                tsfDTO.setCanDrop(tsf.getRouteStop().getCanDrop());
                 return tsfDTO;
             }).toList());
         } else {

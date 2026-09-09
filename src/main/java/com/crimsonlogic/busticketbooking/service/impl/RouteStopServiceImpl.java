@@ -2,9 +2,11 @@ package com.crimsonlogic.busticketbooking.service.impl;
 
 import com.crimsonlogic.busticketbooking.dto.RouteStopCreateRequest;
 import com.crimsonlogic.busticketbooking.dto.RouteStopDTO;
+import com.crimsonlogic.busticketbooking.entity.FareLocation;
 import com.crimsonlogic.busticketbooking.entity.Route;
 import com.crimsonlogic.busticketbooking.entity.RouteStop;
 import com.crimsonlogic.busticketbooking.enums.StopType;
+import com.crimsonlogic.busticketbooking.repository.FareLocationRepository;
 import com.crimsonlogic.busticketbooking.repository.RouteRepository;
 import com.crimsonlogic.busticketbooking.repository.RouteStopRepository;
 import com.crimsonlogic.busticketbooking.service.RouteStopService;
@@ -22,6 +24,7 @@ public class RouteStopServiceImpl implements RouteStopService {
 
     private final RouteStopRepository routeStopRepository;
     private final RouteRepository routeRepository;
+    private final FareLocationRepository fareLocationRepository;
 
     @Override
     public RouteStopDTO createRouteStop(
@@ -113,6 +116,18 @@ public class RouteStopServiceImpl implements RouteStopService {
         routeStop.setDistanceFromSourceKm(
                 request.getDistanceFromSourceKm()
         );
+
+        // Optional: assign to a FareLocation
+        if (request.getFareLocationId() != null && !request.getFareLocationId().isBlank()) {
+            FareLocation fareLocation = fareLocationRepository.findById(request.getFareLocationId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "FareLocation not found: " + request.getFareLocationId()));
+            routeStop.setFareLocation(fareLocation);
+        }
+
+        // Boarding / dropping flags
+        routeStop.setCanBoard(request.getCanBoard() != null ? request.getCanBoard() : true);
+        routeStop.setCanDrop(request.getCanDrop() != null ? request.getCanDrop() : true);
 
         routeStop.setRoute(route);
 
@@ -288,6 +303,25 @@ public class RouteStopServiceImpl implements RouteStopService {
                 request.getDistanceFromSourceKm()
         );
 
+        // Update FareLocation assignment
+        if (request.getFareLocationId() != null && !request.getFareLocationId().isBlank()) {
+            FareLocation fareLocation = fareLocationRepository.findById(request.getFareLocationId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "FareLocation not found: " + request.getFareLocationId()));
+            existingStop.setFareLocation(fareLocation);
+        } else {
+            // Explicitly clearing the fare location assignment
+            existingStop.setFareLocation(null);
+        }
+
+        // Update boarding / dropping flags
+        if (request.getCanBoard() != null) {
+            existingStop.setCanBoard(request.getCanBoard());
+        }
+        if (request.getCanDrop() != null) {
+            existingStop.setCanDrop(request.getCanDrop());
+        }
+
         RouteStop updatedStop =
                 routeStopRepository.save(existingStop);
 
@@ -423,6 +457,16 @@ public class RouteStopServiceImpl implements RouteStopService {
                     routeStop.getRoute().getDestination()
             );
         }
+
+        // FareLocation
+        if (routeStop.getFareLocation() != null) {
+            dto.setFareLocationId(routeStop.getFareLocation().getFareLocationId());
+            dto.setFareLocationName(routeStop.getFareLocation().getName());
+        }
+
+        // Boarding / dropping flags
+        dto.setCanBoard(routeStop.getCanBoard());
+        dto.setCanDrop(routeStop.getCanDrop());
 
         return dto;
     }

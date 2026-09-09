@@ -15,6 +15,7 @@ import com.crimsonlogic.busticketbooking.entity.UserRole;
 import com.crimsonlogic.busticketbooking.enums.BookingStatus;
 import com.crimsonlogic.busticketbooking.enums.SeatStatus;
 import com.crimsonlogic.busticketbooking.repository.BookingRepository;
+import com.crimsonlogic.busticketbooking.repository.RouteFareRepository;
 import com.crimsonlogic.busticketbooking.repository.RouteStopRepository;
 import com.crimsonlogic.busticketbooking.repository.TripRepository;
 import com.crimsonlogic.busticketbooking.repository.TripSeatRepository;
@@ -43,6 +44,7 @@ public class BookingServiceImpl implements BookingService {
     private final RouteStopRepository routeStopRepository;
     private final UserRepository userRepository;
     private final EntityIdGenerator entityIdGenerator;
+    private final RouteFareRepository routeFareRepository;
 
 
     // =========================================================
@@ -249,10 +251,32 @@ public class BookingServiceImpl implements BookingService {
 
 
             /*
-             * Calculate base fare using intermediate stops if available.
+             * Calculate base fare for this passenger's segment.
+             *
+             * Resolution order:
+             *  1. RouteFare (FareLocation → FareLocation): Admin-configured fixed price
+             *     for the fare zone pair.
+             *  2. TripStopFare diff (fareFromSource): Operator-entered cumulative fares.
+             *  3. Fallback: tripSeat.getSeatFare() (trip base fare).
              */
             BigDecimal seatFare = tripSeat.getSeatFare();
-            if (trip.getStopFares() != null && !trip.getStopFares().isEmpty()) {
+
+            // Attempt RouteFare resolution (FareLocation-based)
+            boolean fareResolvedViaFareLocation = false;
+            if (boardingPoint.getFareLocation() != null && droppingPoint.getFareLocation() != null) {
+                String fromFlId = boardingPoint.getFareLocation().getFareLocationId();
+                String toFlId   = droppingPoint.getFareLocation().getFareLocationId();
+                java.util.Optional<com.crimsonlogic.busticketbooking.entity.RouteFare> routeFareOpt =
+                        routeFareRepository.findByFromFareLocation_FareLocationIdAndToFareLocation_FareLocationId(
+                                fromFlId, toFlId);
+                if (routeFareOpt.isPresent()) {
+                    seatFare = routeFareOpt.get().getFare();
+                    fareResolvedViaFareLocation = true;
+                }
+            }
+
+            // Fallback: TripStopFare diff
+            if (!fareResolvedViaFareLocation && trip.getStopFares() != null && !trip.getStopFares().isEmpty()) {
                 BigDecimal sourceFare = BigDecimal.ZERO;
                 BigDecimal destFare = trip.getBaseFare();
 

@@ -27,4 +27,20 @@ public class RouteStopCreateRequest {
     @NotNull
     @DecimalMin(value = "0.0")
     private BigDecimal distanceFromSourceKm;
+
+    /*
+     * Optional: assign this physical stop to a logical fare zone.
+     * If null, stop is not part of any FareLocation group.
+     */
+    private String fareLocationId;
+
+    /*
+     * Whether passengers may board at this stop. Defaults to true.
+     */
+    private Boolean canBoard = true;
+
+    /*
+     * Whether passengers may alight at this stop. Defaults to true.
+     */
+    private Boolean canDrop = true;
 }
