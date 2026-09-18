@@ -26,7 +26,8 @@ public interface CancellationService {
     java.util.List<CancellationDTO> getPendingRefunds();
 
     CancellationDTO processRefund(
-            String cancellationId,
-            String refundReference
+            String cancellationId
     );
+
+    com.crimsonlogic.busticketbooking.dto.CancellationEstimateDTO getCancellationEstimate(String bookingId);
 }

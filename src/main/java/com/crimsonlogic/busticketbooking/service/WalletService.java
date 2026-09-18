@@ -14,4 +14,11 @@ public interface WalletService {
     
     // Internal use for booking
     void deductBalance(String userId, BigDecimal amount, String bookingId);
+    
+    // Internal use for refunds
+    void addBalance(String userId, BigDecimal amount, String description, String referenceId);
+
+    // Razorpay Integration
+    com.crimsonlogic.busticketbooking.dto.RazorpayOrderResponse createRazorpayOrder(WalletRechargeRequest request);
+    WalletDTO verifyRazorpayPayment(com.crimsonlogic.busticketbooking.dto.RazorpayVerificationRequest request);
 }

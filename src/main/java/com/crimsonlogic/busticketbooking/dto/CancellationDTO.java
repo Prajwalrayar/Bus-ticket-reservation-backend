@@ -34,4 +34,6 @@ public class CancellationDTO {
     private String bookingId;
 
     private String cancelledByUserId;
+
+    private String paymentTransactionId;
 }

@@ -292,6 +292,7 @@ public class PaymentServiceImpl implements PaymentService {
             if (isValid) {
                 payment.setPaymentStatus(PaymentStatus.SUCCESS);
                 payment.setPaymentCompletedAt(LocalDateTime.now());
+                payment.setGatewayTransactionId(request.getRazorpayPaymentId());
                 
                 booking.setBookingStatus(BookingStatus.CONFIRMED);
                 

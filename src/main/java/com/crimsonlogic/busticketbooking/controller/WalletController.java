@@ -26,13 +26,23 @@ public class WalletController {
         return ResponseEntity.ok(ApiResponse.success(walletService.getMyWallet()));
     }
 
-    @PostMapping("/recharge")
+    @PostMapping("/recharge/razorpay/create-order")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ApiResponse<WalletDTO>> rechargeWallet(
+    public ResponseEntity<ApiResponse<com.crimsonlogic.busticketbooking.dto.RazorpayOrderResponse>> createRechargeOrder(
             @Valid @RequestBody WalletRechargeRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
+                "Razorpay Order created",
+                walletService.createRazorpayOrder(request)
+        ));
+    }
+
+    @PostMapping("/recharge/razorpay/verify")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<WalletDTO>> verifyRechargePayment(
+            @Valid @RequestBody com.crimsonlogic.busticketbooking.dto.RazorpayVerificationRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
                 "Wallet recharged successfully",
-                walletService.rechargeWallet(request)
+                walletService.verifyRazorpayPayment(request)
         ));
     }
 

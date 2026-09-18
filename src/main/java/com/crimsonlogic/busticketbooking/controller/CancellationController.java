@@ -20,6 +20,23 @@ public class CancellationController {
 
 
     // =========================================================
+    // GET CANCELLATION ESTIMATE
+    // =========================================================
+
+    @GetMapping("/bookings/{bookingId}/cancellation-estimate")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<com.crimsonlogic.busticketbooking.dto.CancellationEstimateDTO>>
+    getCancellationEstimate(
+            @PathVariable String bookingId) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        cancellationService.getCancellationEstimate(bookingId)
+                )
+        );
+    }
+
+    // =========================================================
     // CANCEL BOOKING
     // =========================================================
 
@@ -133,13 +150,12 @@ public class CancellationController {
     @PutMapping("/cancellations/{cancellationId}/refund")
     @PreAuthorize("hasAnyRole('SUPPORT_AGENT', 'ADMIN')")
     public ResponseEntity<ApiResponse<CancellationDTO>> processRefund(
-            @PathVariable String cancellationId,
-            @RequestParam String refundReference) {
+            @PathVariable String cancellationId) {
         
         return ResponseEntity.ok(
                 ApiResponse.success(
                         "Refund processed successfully",
-                        cancellationService.processRefund(cancellationId, refundReference)
+                        cancellationService.processRefund(cancellationId)
                 )
         );
     }
