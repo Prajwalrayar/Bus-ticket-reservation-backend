@@ -58,6 +58,11 @@ public class AdminServiceImpl implements AdminService {
                 )
         );
 
+        Double revenue = bookingRepository.sumTotalRevenueByStatus(
+                com.crimsonlogic.busticketbooking.enums.BookingStatus.CONFIRMED
+        );
+        dashboard.setTotalRevenue(revenue != null ? revenue : 0.0);
+
         return dashboard;
     }
 

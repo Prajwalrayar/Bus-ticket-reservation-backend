@@ -212,6 +212,58 @@ public class CancellationServiceImpl
 
 
     // =========================================================
+    // GET PENDING REFUNDS
+    // =========================================================
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<CancellationDTO> getPendingRefunds() {
+        // Find cancellations that are in INITIATED or PROCESSING state
+        java.util.List<Cancellation> cancellations = cancellationRepository
+                .findByRefundStatusInOrderByCreatedAtDesc(
+                        java.util.List.of(RefundStatus.INITIATED, RefundStatus.PROCESSING)
+                );
+
+        return cancellations.stream()
+                .map(this::convertToDTO)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+
+    // =========================================================
+    // PROCESS REFUND
+    // =========================================================
+
+    @Override
+    public CancellationDTO processRefund(
+            String cancellationId,
+            String refundReference) {
+
+        Cancellation cancellation =
+                cancellationRepository.findById(cancellationId)
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "Cancellation not found"
+                                )
+                        );
+
+        if (cancellation.getRefundStatus() == RefundStatus.COMPLETED) {
+            throw new IllegalArgumentException("Refund is already completed");
+        }
+        if (cancellation.getRefundStatus() == RefundStatus.NOT_APPLICABLE) {
+            throw new IllegalArgumentException("Refund is not applicable for this cancellation");
+        }
+
+        cancellation.setRefundStatus(RefundStatus.COMPLETED);
+        cancellation.setRefundReference(refundReference);
+        cancellation.setRefundCompletedAt(LocalDateTime.now());
+
+        Cancellation savedCancellation = cancellationRepository.save(cancellation);
+        return convertToDTO(savedCancellation);
+    }
+
+
+    // =========================================================
     // GET BY ID
     // =========================================================
 

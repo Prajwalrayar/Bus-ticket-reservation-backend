@@ -17,6 +17,16 @@ public interface PaymentService {
             PaymentRequest request
     );
 
+    com.crimsonlogic.busticketbooking.dto.RazorpayOrderResponse createRazorpayOrder(
+            String bookingId,
+            PaymentRequest request
+    );
+
+    PaymentDTO verifyRazorpayPayment(
+            String bookingId,
+            com.crimsonlogic.busticketbooking.dto.RazorpayVerificationRequest request
+    );
+
     PaymentDTO getPaymentById(
             String paymentId
     );

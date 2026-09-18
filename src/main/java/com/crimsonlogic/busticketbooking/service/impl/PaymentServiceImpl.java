@@ -28,6 +28,15 @@ import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 
+import com.crimsonlogic.busticketbooking.dto.RazorpayOrderResponse;
+import com.crimsonlogic.busticketbooking.dto.RazorpayVerificationRequest;
+import com.razorpay.Order;
+import com.razorpay.RazorpayClient;
+import com.razorpay.RazorpayException;
+import com.razorpay.Utils;
+import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Value;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -40,6 +49,13 @@ public class PaymentServiceImpl implements PaymentService {
     private final TicketRepository ticketRepository;
     private final EntityIdGenerator entityIdGenerator;
     private final WalletService walletService;
+    private final RazorpayClient razorpayClient;
+
+    @Value("${razorpay.key.id}")
+    private String razorpayKeyId;
+
+    @Value("${razorpay.key.secret}")
+    private String razorpaySecret;
 
     private static final Random RANDOM = new Random();
 
@@ -191,6 +207,150 @@ public class PaymentServiceImpl implements PaymentService {
         bookingRepository.save(booking);
         Payment saved = paymentRepository.save(payment);
         return convertToDTO(saved);
+    }
+
+    // ── RAZORPAY INTEGRATION ──────────────────────────────────────────────────
+
+    @Override
+    public RazorpayOrderResponse createRazorpayOrder(String bookingId, PaymentRequest request) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new IllegalArgumentException("Booking not found"));
+
+        if (booking.getBookingStatus() != BookingStatus.PENDING) {
+            throw new IllegalArgumentException("Booking is no longer pending");
+        }
+        if (booking.getExpiryTime() != null && booking.getExpiryTime().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Booking payment window has expired");
+        }
+
+        BigDecimal walletAmountUsed = BigDecimal.ZERO;
+        BigDecimal gatewayAmount = booking.getTotalAmount();
+        
+        if (request.isUseWallet()) {
+            BigDecimal walletBalance = walletService.getMyWallet().getBalance();
+            if (walletBalance.compareTo(BigDecimal.ZERO) > 0) {
+                if (walletBalance.compareTo(gatewayAmount) >= 0) {
+                    walletAmountUsed = gatewayAmount;
+                    gatewayAmount = BigDecimal.ZERO;
+                } else {
+                    walletAmountUsed = walletBalance;
+                    gatewayAmount = gatewayAmount.subtract(walletBalance);
+                }
+            }
+        }
+
+        Payment payment = buildPayment(booking, "RAZORPAY", PaymentStatus.INITIATED, gatewayAmount, walletAmountUsed);
+        payment = paymentRepository.save(payment);
+
+        RazorpayOrderResponse response = new RazorpayOrderResponse();
+        response.setPayment(convertToDTO(payment));
+
+        if (gatewayAmount.compareTo(BigDecimal.ZERO) > 0) {
+            try {
+                JSONObject orderRequest = new JSONObject();
+                // amount in paise
+                orderRequest.put("amount", gatewayAmount.multiply(new BigDecimal("100")).intValue());
+                orderRequest.put("currency", "INR");
+                orderRequest.put("receipt", payment.getPaymentId());
+
+                Order razorpayOrder = razorpayClient.orders.create(orderRequest);
+                
+                response.setOrderId(razorpayOrder.get("id"));
+                response.setKeyId(razorpayKeyId);
+                response.setAmount(gatewayAmount);
+                response.setCurrency("INR");
+                
+                payment.setGatewayTransactionId(razorpayOrder.get("id"));
+                paymentRepository.save(payment);
+            } catch (RazorpayException e) {
+                log.error("Failed to create Razorpay Order", e);
+                throw new RuntimeException("Failed to create Razorpay Order: " + e.getMessage());
+            }
+        }
+
+        return response;
+    }
+
+    @Override
+    public PaymentDTO verifyRazorpayPayment(String bookingId, RazorpayVerificationRequest request) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new IllegalArgumentException("Booking not found"));
+        
+        Payment payment = paymentRepository.findByBooking_BookingId(bookingId).stream()
+                .filter(p -> p.getGatewayTransactionId() != null && p.getGatewayTransactionId().equals(request.getRazorpayOrderId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Payment record not found for this order ID"));
+
+        try {
+            JSONObject options = new JSONObject();
+            options.put("razorpay_order_id", request.getRazorpayOrderId());
+            options.put("razorpay_payment_id", request.getRazorpayPaymentId());
+            options.put("razorpay_signature", request.getRazorpaySignature());
+
+            boolean isValid = Utils.verifyPaymentSignature(options, razorpaySecret);
+
+            if (isValid) {
+                payment.setPaymentStatus(PaymentStatus.SUCCESS);
+                payment.setPaymentCompletedAt(LocalDateTime.now());
+                
+                booking.setBookingStatus(BookingStatus.CONFIRMED);
+                
+                if (booking.getBookingSeats() != null) {
+                    booking.getBookingSeats().forEach(bs -> {
+                        TripSeat ts = bs.getTripSeat();
+                        ts.setSeatStatus(SeatStatus.BOOKED);
+                        ts.setLockedByUserId(null);
+                        ts.setLockExpiryTime(null);
+                        tripSeatRepository.save(ts);
+                    });
+                }
+                
+                if (payment.getWalletAmountUsed() != null && payment.getWalletAmountUsed().compareTo(BigDecimal.ZERO) > 0) {
+                    walletService.deductBalance(booking.getBookedByUser().getUserId(), payment.getWalletAmountUsed(), bookingId);
+                }
+                
+                Ticket ticket = new Ticket();
+                ticket.setBooking(booking);
+                ticket.setIssuedAt(LocalDateTime.now());
+                ticket.setTicketNumber("TKT-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+                ticket.setVerificationCode(UUID.randomUUID().toString());
+                ticketRepository.save(ticket);
+                
+                log.info("Razorpay Payment verified for booking {}. PNR: {}", bookingId, booking.getBookingReference());
+            } else {
+                failPaymentAndReleaseSeats(payment, booking, "Signature Verification Failed", "INVALID_SIGNATURE");
+            }
+
+        } catch (Exception e) {
+            log.error("Razorpay signature verification failed", e);
+            failPaymentAndReleaseSeats(payment, booking, "Verification Exception: " + e.getMessage(), "VERIFY_ERROR");
+        }
+
+        bookingRepository.save(booking);
+        Payment saved = paymentRepository.save(payment);
+        return convertToDTO(saved);
+    }
+
+    private void failPaymentAndReleaseSeats(Payment payment, Booking booking, String reason, String code) {
+        payment.setPaymentStatus(PaymentStatus.FAILED);
+        payment.setPaymentCompletedAt(LocalDateTime.now());
+        payment.setFailureReason(reason);
+        payment.setFailureCode(code);
+        
+        booking.setBookingStatus(BookingStatus.FAILED);
+
+        log.warn("Payment FAILED for booking {}. Releasing seat locks. Reason: {}", booking.getBookingId(), reason);
+        if (booking.getBookingSeats() != null) {
+            booking.getBookingSeats().forEach(bs -> {
+                TripSeat ts = bs.getTripSeat();
+                if (ts.getSeatStatus() == SeatStatus.TEMPORARILY_LOCKED) {
+                    ts.setSeatStatus(SeatStatus.AVAILABLE);
+                    ts.setLockedByUserId(null);
+                    ts.setLockExpiryTime(null);
+                    tripSeatRepository.save(ts);
+                }
+            });
+        }
     }
 
     // ── QUERY METHODS ─────────────────────────────────────────────────────────

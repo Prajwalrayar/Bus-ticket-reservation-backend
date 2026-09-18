@@ -77,5 +77,14 @@ public interface BookingRepository extends JpaRepository<Booking, String> {
 
     List<Booking> findByBookingStatusAndExpiryTimeBefore(BookingStatus status, java.time.LocalDateTime time);
 
+    long countByTrip_Bus_Operator(com.crimsonlogic.busticketbooking.entity.Operator operator);
+
+    long countByTrip_Bus_OperatorAndBookingStatus(com.crimsonlogic.busticketbooking.entity.Operator operator, BookingStatus status);
+
+    @Query("SELECT SUM(b.totalAmount) FROM Booking b WHERE b.trip.bus.operator = :operator AND b.bookingStatus = :status")
+    Double sumRevenueByOperatorAndStatus(@Param("operator") com.crimsonlogic.busticketbooking.entity.Operator operator, @Param("status") BookingStatus status);
+
+    @Query("SELECT SUM(b.totalAmount) FROM Booking b WHERE b.bookingStatus = :status")
+    Double sumTotalRevenueByStatus(@Param("status") BookingStatus status);
 }
 

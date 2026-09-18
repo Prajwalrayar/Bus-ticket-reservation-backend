@@ -22,4 +22,11 @@ public interface CancellationService {
     CancellationDTO getCancellationByReference(
             String cancellationReference
     );
+
+    java.util.List<CancellationDTO> getPendingRefunds();
+
+    CancellationDTO processRefund(
+            String cancellationId,
+            String refundReference
+    );
 }

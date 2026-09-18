@@ -108,4 +108,39 @@ public class CancellationController {
                 )
         );
     }
+
+
+    // =========================================================
+    // GET PENDING REFUNDS
+    // =========================================================
+
+    @GetMapping("/cancellations/pending")
+    @PreAuthorize("hasAnyRole('SUPPORT_AGENT', 'ADMIN')")
+    public ResponseEntity<ApiResponse<java.util.List<CancellationDTO>>> getPendingRefunds() {
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "Fetched pending refunds successfully",
+                        cancellationService.getPendingRefunds()
+                )
+        );
+    }
+
+
+    // =========================================================
+    // PROCESS REFUND
+    // =========================================================
+
+    @PutMapping("/cancellations/{cancellationId}/refund")
+    @PreAuthorize("hasAnyRole('SUPPORT_AGENT', 'ADMIN')")
+    public ResponseEntity<ApiResponse<CancellationDTO>> processRefund(
+            @PathVariable String cancellationId,
+            @RequestParam String refundReference) {
+        
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "Refund processed successfully",
+                        cancellationService.processRefund(cancellationId, refundReference)
+                )
+        );
+    }
 }

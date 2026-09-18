@@ -377,14 +377,14 @@ public class TripServiceImpl implements TripService {
         if (request.getFromLocationId() != null) {
             sourceNames = locationService.getAllNamesForLocationId(request.getFromLocationId());
         } else {
-            sourceNames = java.util.List.of(request.getSource());
+            sourceNames = locationService.getAllNamesForLocationNameOrAlias(request.getSource());
         }
 
         List<String> destinationNames;
         if (request.getToLocationId() != null) {
             destinationNames = locationService.getAllNamesForLocationId(request.getToLocationId());
         } else {
-            destinationNames = java.util.List.of(request.getDestination());
+            destinationNames = locationService.getAllNamesForLocationNameOrAlias(request.getDestination());
         }
 
         List<Trip> trips;
@@ -557,6 +557,18 @@ public class TripServiceImpl implements TripService {
     }
 
     @Override
+    public void cancelTrip(String tripId, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Cancellation reason is required");
+        }
+        
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new IllegalArgumentException("Trip not found"));
+
+        cancelTripInternal(trip, reason);
+    }
+
+    @Override
     public void cancelTrip(
             String busRegistrationNumber,
             String source,
@@ -577,6 +589,10 @@ public class TripServiceImpl implements TripService {
                 travelDate
         );
 
+        cancelTripInternal(trip, reason);
+    }
+
+    private void cancelTripInternal(Trip trip, String reason) {
         // Verify the operator owns this trip's bus
         authorizeOperatorForBus(trip.getBus());
 
@@ -882,6 +898,12 @@ public class TripServiceImpl implements TripService {
             dto.setAmenities(
                     bus.getAmenities()
             );
+
+            // Derive AC flag: true if amenities contain "AC", otherwise Non-AC (default false)
+            boolean hasAc = bus.getAmenities() != null &&
+                    bus.getAmenities().stream()
+                            .anyMatch(a -> a.equalsIgnoreCase("AC") || a.equalsIgnoreCase("Air Conditioning"));
+            dto.setAc(hasAc);
 
             if (bus.getOperator() != null) {
                 dto.setOperatorName(

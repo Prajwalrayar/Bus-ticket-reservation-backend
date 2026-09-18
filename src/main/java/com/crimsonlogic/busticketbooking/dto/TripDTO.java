@@ -50,8 +50,11 @@ public class TripDTO {
     // ── Operator fields ──────────────────────────────────────
     private String operatorName;
 
-    // ── Seat availability (computed) ─────────────────────────
+    // ── Seat availability (computed) ─────────────────────────────────────
     private int totalSeats;
 
     private int availableSeats;
+
+    // ── AC / Non-AC (derived from amenities) ─────────────────────────────
+    private boolean isAc;
 }

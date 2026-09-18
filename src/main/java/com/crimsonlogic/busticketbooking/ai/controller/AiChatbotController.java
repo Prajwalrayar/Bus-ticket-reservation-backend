@@ -28,8 +28,9 @@ public class AiChatbotController {
         
         // Use the authenticated user's ID for secure routing
         String userId = authentication.getName();
+        String userRole = authentication.getAuthorities().iterator().next().getAuthority();
         
-        ChatResponse response = aiChatbotService.processChatMessage(userId, request);
+        ChatResponse response = aiChatbotService.processChatMessage(userId, userRole, request);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 }

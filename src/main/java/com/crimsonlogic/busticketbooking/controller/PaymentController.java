@@ -56,6 +56,34 @@ public class PaymentController {
     /**
      * Get all payment attempts for a booking.
      */
+    @PostMapping("/bookings/{bookingId}/payments/razorpay/create-order")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<com.crimsonlogic.busticketbooking.dto.RazorpayOrderResponse>> createRazorpayOrder(
+            @PathVariable String bookingId,
+            @Valid @RequestBody PaymentRequest request) {
+
+        return ResponseEntity.ok(ApiResponse.success(
+                "Razorpay Order created",
+                paymentService.createRazorpayOrder(bookingId, request)));
+    }
+
+    @PostMapping("/bookings/{bookingId}/payments/razorpay/verify")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<PaymentDTO>> verifyRazorpayPayment(
+            @PathVariable String bookingId,
+            @Valid @RequestBody com.crimsonlogic.busticketbooking.dto.RazorpayVerificationRequest request) {
+
+        PaymentDTO payment = paymentService.verifyRazorpayPayment(bookingId, request);
+        return ResponseEntity.ok(ApiResponse.success(
+                payment.getPaymentStatus().name().equals("SUCCESS")
+                        ? "Payment successful. Booking confirmed!"
+                        : "Payment failed. Please try again.",
+                payment));
+    }
+
+    /**
+     * Get all payment attempts for a booking.
+     */
     @GetMapping("/bookings/{bookingId}/payments")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<List<PaymentDTO>>> getPaymentsByBooking(

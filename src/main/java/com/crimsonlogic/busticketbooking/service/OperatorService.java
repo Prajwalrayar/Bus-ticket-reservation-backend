@@ -18,4 +18,6 @@ public interface OperatorService {
     void approveOperator(String companyName);
 
     void deactivateOperator(String companyName);
+
+    com.crimsonlogic.busticketbooking.dto.AdminDashboardDTO getDashboardKPIs();
 }
