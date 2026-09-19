@@ -22,4 +22,6 @@ public class AdminDashboardDTO {
     private long confirmedBookings;
 
     private long cancelledBookings;
+
+    private double totalRevenue;
 }

@@ -6,7 +6,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 @Data
@@ -44,9 +46,21 @@ public class BookingDTO {
 
     private String tripId;
 
+    private String tripSource;
+
+    private String tripDestination;
+
+    private LocalDate tripTravelDate;
+
+    private LocalTime tripDepartureTime;
+
+    private String busName;
+
     private List<BookingSeatDTO> bookingSeats;
 
     private LocalDateTime createdAt;
     
     private LocalDateTime expiryTime;
+
+    private String offerCodeUsed;
 }

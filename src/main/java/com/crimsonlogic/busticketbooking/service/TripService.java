@@ -40,6 +40,8 @@ public interface TripService {
             String reason
     );
 
+    void cancelTrip(String tripId, String reason);
+
     List<TripSeatDTO> getTripSeats(
             String busRegistrationNumber,
             String source,

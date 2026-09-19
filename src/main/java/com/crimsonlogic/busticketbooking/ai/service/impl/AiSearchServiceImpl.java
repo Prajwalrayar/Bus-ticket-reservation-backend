@@ -41,8 +41,9 @@ public class AiSearchServiceImpl implements AiSearchService {
                 "The current date is %s. Resolve relative dates like 'tomorrow' or 'next week' to exact dates. " +
                 "For busType, use exact values: 'SEATER', 'SLEEPER', or 'SEMI_SLEEPER' if specified, otherwise leave null. " +
                 "If 'AC' is mentioned, set isAc to true. If 'non-AC' is mentioned, set isAc to false. " +
-                "Return null for fields that are not explicitly requested. " +
-                "Ensure source and destination are provided if they can be extracted. \n\n%s", 
+                "Always return source and destination as lowercase city names (e.g., 'bangalore', not 'Bangalore'). " +
+                "Return null for fields that are not explicitly requested, including travelDate if no date is mentioned. " +
+                "Ensure source and destination are provided if they can be extracted. \n\n%s",
                 LocalDate.now().toString(), format);
 
         String response = chatClient.prompt()
@@ -51,16 +52,24 @@ public class AiSearchServiceImpl implements AiSearchService {
                 .call()
                 .content();
 
-        TripSearchRequest searchRequest = converter.convert(response);
+        // Strip markdown fences if Gemini wraps the JSON
+        String cleanResponse = response.trim();
+        if (cleanResponse.startsWith("```json")) cleanResponse = cleanResponse.substring(7);
+        else if (cleanResponse.startsWith("```")) cleanResponse = cleanResponse.substring(3);
+        if (cleanResponse.endsWith("```")) cleanResponse = cleanResponse.substring(0, cleanResponse.length() - 3);
+        cleanResponse = cleanResponse.trim();
+
+        TripSearchRequest searchRequest = converter.convert(cleanResponse);
 
         if (searchRequest == null || searchRequest.getSource() == null || searchRequest.getDestination() == null) {
-            throw new IllegalArgumentException("Could not extract necessary search criteria (source and destination) from your query.");
+            throw new IllegalArgumentException("Please specify both source and destination cities to search for buses.");
         }
 
-        // Default travelDate to today if not provided
-        if (searchRequest.getTravelDate() == null) {
-            searchRequest.setTravelDate(LocalDate.now());
-        }
+        // Lowercase city names to match DB query (which uses LOWER() on columns)
+        searchRequest.setSource(searchRequest.getSource().toLowerCase().trim());
+        searchRequest.setDestination(searchRequest.getDestination().toLowerCase().trim());
+
+        // Do NOT default to today - leave null so we search all future trips
 
         saveSearchHistory(query, searchRequest, userId);
 

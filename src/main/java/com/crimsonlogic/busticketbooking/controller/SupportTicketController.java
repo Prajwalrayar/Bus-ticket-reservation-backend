@@ -20,11 +20,19 @@ import java.util.List;
 public class SupportTicketController {
 
     private final SupportTicketService supportTicketService;
+    private final com.crimsonlogic.busticketbooking.service.FileStorageService fileStorageService;
 
-    @PostMapping
+    @PostMapping(consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<SupportTicketDTO>> createTicket(
-            @Valid @RequestBody SupportTicketCreateRequest request) {
+            @Valid @ModelAttribute SupportTicketCreateRequest request,
+            @RequestPart(value = "attachment", required = false) org.springframework.web.multipart.MultipartFile attachment) {
+        
+        if (attachment != null && !attachment.isEmpty()) {
+            String filePath = fileStorageService.storeFile(attachment);
+            request.setAttachmentPath(filePath);
+        }
+
         SupportTicketDTO ticket = supportTicketService.createTicket(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Support ticket created successfully", ticket));
@@ -55,5 +63,28 @@ public class SupportTicketController {
             @Valid @RequestBody SupportTicketUpdateRequest request) {
         SupportTicketDTO ticket = supportTicketService.updateTicketStatus(ticketId, request);
         return ResponseEntity.ok(ApiResponse.success("Ticket status updated", ticket));
+    }
+
+    @GetMapping("/{ticketId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<com.crimsonlogic.busticketbooking.dto.SupportTicketWithMessagesDTO>> getTicketWithMessages(
+            @PathVariable String ticketId) {
+        return ResponseEntity.ok(ApiResponse.success(supportTicketService.getTicketWithMessages(ticketId)));
+    }
+
+    @PostMapping("/{ticketId}/messages")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<com.crimsonlogic.busticketbooking.dto.SupportTicketMessageDTO>> addMessage(
+            @PathVariable String ticketId,
+            @Valid @RequestBody com.crimsonlogic.busticketbooking.dto.SupportTicketReplyRequest request) {
+        com.crimsonlogic.busticketbooking.dto.SupportTicketMessageDTO message = supportTicketService.addMessage(ticketId, request);
+        return ResponseEntity.ok(ApiResponse.success("Reply added successfully", message));
+    }
+
+    @PatchMapping("/{ticketId}/resolve")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<SupportTicketDTO>> resolveTicket(@PathVariable String ticketId) {
+        SupportTicketDTO ticket = supportTicketService.resolveTicket(ticketId);
+        return ResponseEntity.ok(ApiResponse.success("Ticket resolved", ticket));
     }
 }

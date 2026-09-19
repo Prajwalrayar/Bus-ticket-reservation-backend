@@ -17,4 +17,10 @@ public interface SupportTicketService {
     SupportTicketDTO updateTicketStatus(String ticketId, SupportTicketUpdateRequest request);
 
     List<SupportTicketDTO> getAllTickets();
+
+    com.crimsonlogic.busticketbooking.dto.SupportTicketWithMessagesDTO getTicketWithMessages(String ticketId);
+
+    com.crimsonlogic.busticketbooking.dto.SupportTicketMessageDTO addMessage(String ticketId, com.crimsonlogic.busticketbooking.dto.SupportTicketReplyRequest request);
+
+    SupportTicketDTO resolveTicket(String ticketId);
 }

@@ -28,7 +28,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- =============================================================================
 -- LOCATIONS & ALIASES
 -- =============================================================================
-INSERT INTO locations (location_id, name, is_active, created_at, updated_at)
+INSERT IGNORE INTO locations (location_id, name, is_active, created_at, updated_at)
 VALUES
   (1, 'Bengaluru', true, NOW(), NOW()),
   (2, 'Mumbai', true, NOW(), NOW()),
@@ -45,7 +45,7 @@ VALUES
   (13, 'Kolkata', true, NOW(), NOW()),
   (14, 'Siliguri', true, NOW(), NOW());
 
-INSERT INTO location_aliases (alias_id, location_id, alias, is_active, created_at, updated_at)
+INSERT IGNORE INTO location_aliases (alias_id, location_id, alias, is_active, created_at, updated_at)
 VALUES
   (1, 1, 'Bangalore', true, NOW(), NOW()),
   (2, 4, 'Belgaum', true, NOW(), NOW()),
@@ -54,17 +54,17 @@ VALUES
 -- =============================================================================
 -- USERS (password = BCrypt of "Test@1234")
 -- =============================================================================
-INSERT INTO users (user_id, user_name, user_email, user_mobile_number, user_password, is_active, created_at, updated_at)
+INSERT IGNORE INTO users (user_id, user_name, user_email, mobile_number, user_password, is_active, is_verified, is_temporary_password, created_at, updated_at)
 VALUES
-  ('u-admin-001', 'Admin User',    'admin@redbus.com',   '9000000001', '$2a$12$MH7.JjWlQGFqTuEP7j./iOwh8c1BkFrPyTL6VsUcRR0lgH6V0UdFu', true, NOW(), NOW()),
-  ('u-cust-001',  'Rahul Sharma',  'rahul@example.com',  '9876543210', '$2a$12$MH7.JjWlQGFqTuEP7j./iOwh8c1BkFrPyTL6VsUcRR0lgH6V0UdFu', true, NOW(), NOW()),
-  ('u-cust-002',  'Priya Singh',   'priya@example.com',  '9876543211', '$2a$12$MH7.JjWlQGFqTuEP7j./iOwh8c1BkFrPyTL6VsUcRR0lgH6V0UdFu', true, NOW(), NOW()),
-  ('u-op-001',    'VRL Operator',  'operator@vrl.com',   '9800000001', '$2a$12$MH7.JjWlQGFqTuEP7j./iOwh8c1BkFrPyTL6VsUcRR0lgH6V0UdFu', true, NOW(), NOW());
+  ('u-admin-001', 'Admin User',    'admin@redbus.com',   '9000000001', '$2b$10$Haf0t7mX2tJ06kEqqrHA0uOlwircDBud7nucNQK/Tp3hT9QQLxF36', true, true, false, NOW(), NOW()),
+  ('u-cust-001',  'Rahul Sharma',  'rahul@example.com',  '9876543210', '$2b$10$Haf0t7mX2tJ06kEqqrHA0uOlwircDBud7nucNQK/Tp3hT9QQLxF36', true, true, false, NOW(), NOW()),
+  ('u-cust-002',  'Priya Singh',   'priya@example.com',  '9876543211', '$2b$10$Haf0t7mX2tJ06kEqqrHA0uOlwircDBud7nucNQK/Tp3hT9QQLxF36', true, true, false, NOW(), NOW()),
+  ('u-op-001',    'VRL Operator',  'operator@vrl.com',   '9800000001', '$2b$10$Haf0t7mX2tJ06kEqqrHA0uOlwircDBud7nucNQK/Tp3hT9QQLxF36', true, true, false, NOW(), NOW());
 
 -- =============================================================================
 -- USER ROLES
 -- =============================================================================
-INSERT INTO user_roles (user_role_id, user_id, role_name)
+INSERT IGNORE INTO user_roles (user_role_id, user_id, role_name)
 VALUES
   ('ur-001', 'u-admin-001', 'ADMIN'),
   ('ur-002', 'u-cust-001',  'PASSENGER'),
@@ -74,29 +74,36 @@ VALUES
 -- =============================================================================
 -- OPERATORS
 -- =============================================================================
-INSERT INTO operators (operator_id, company_name, contact_email, contact_phone, rating, is_active, created_at, updated_at)
+INSERT IGNORE INTO operators (operator_id, company_name, contact_email, contact_phone, is_approved, is_active, created_at, updated_at)
 VALUES
-  ('op-001', 'VRL Travels',       'info@vrl.com',       '080-22001122', 4.5, true, NOW(), NOW()),
-  ('op-002', 'SRS Travels',       'info@srs.com',       '080-33002233', 4.2, true, NOW(), NOW()),
-  ('op-003', 'KSRTC',             'info@ksrtc.kar.in',  '080-22214001', 4.0, true, NOW(), NOW());
+  ('op-001', 'VRL Travels',       'info@vrl.com',       '080-22001122', true, true, NOW(), NOW()),
+  ('op-002', 'SRS Travels',       'info@srs.com',       '080-33002233', true, true, NOW(), NOW()),
+  ('op-003', 'KSRTC',             'info@ksrtc.kar.in',  '080-22214001', true, true, NOW(), NOW());
 
 -- =============================================================================
 -- BUSES
 -- =============================================================================
-INSERT INTO buses (bus_id, operator_id, bus_number, registration_number, bus_type, total_seats, amenities, is_active, created_at, updated_at)
+INSERT IGNORE INTO buses (bus_id, operator_id, registration_number, bus_type, is_active, created_at, updated_at)
 VALUES
-  ('bus-001', 'op-001', 'VRL-101', 'KA01AB1234', 'AC_SLEEPER',     40, 'WiFi,Charging Port,Blanket,Water Bottle', true, NOW(), NOW()),
-  ('bus-002', 'op-001', 'VRL-102', 'KA01AB5678', 'NON_AC_SLEEPER', 40, 'Water Bottle,Blanket',                    true, NOW(), NOW()),
-  ('bus-003', 'op-002', 'SRS-201', 'KA02CD1111', 'AC_SEATER',      40, 'WiFi,Charging Port,Snacks',               true, NOW(), NOW()),
-  ('bus-004', 'op-002', 'SRS-202', 'KA02CD2222', 'AC_SLEEPER',     40, 'WiFi,Blanket,Charging Port',              true, NOW(), NOW()),
-  ('bus-005', 'op-003', 'KSR-301', 'KA57FE3333', 'NON_AC_SEATER',  40, 'None',                                    true, NOW(), NOW()),
-  ('bus-006', 'op-003', 'KSR-302', 'KA57FE4444', 'AC_SEATER',      40, 'Charging Port,WiFi',                      true, NOW(), NOW());
+  ('bus-001', 'op-001', 'KA01AB1234', 'SLEEPER', true, NOW(), NOW()),
+  ('bus-002', 'op-001', 'KA01AB5678', 'SEMI_SLEEPER', true, NOW(), NOW()),
+  ('bus-003', 'op-002', 'KA02CD1111', 'SEATER', true, NOW(), NOW()),
+  ('bus-004', 'op-002', 'KA02CD2222', 'SLEEPER', true, NOW(), NOW()),
+  ('bus-005', 'op-003', 'KA57FE3333', 'SEATER', true, NOW(), NOW()),
+  ('bus-006', 'op-003', 'KA57FE4444', 'SEATER', true, NOW(), NOW());
+
+INSERT IGNORE INTO bus_amenities (bus_id, amenities) VALUES
+  ('bus-001', 'WiFi'), ('bus-001', 'Charging Port'), ('bus-001', 'Blanket'), ('bus-001', 'Water Bottle'),
+  ('bus-002', 'Water Bottle'), ('bus-002', 'Blanket'),
+  ('bus-003', 'WiFi'), ('bus-003', 'Charging Port'), ('bus-003', 'Snacks'),
+  ('bus-004', 'WiFi'), ('bus-004', 'Blanket'), ('bus-004', 'Charging Port'),
+  ('bus-006', 'Charging Port'), ('bus-006', 'WiFi');
 
 -- =============================================================================
 -- BUS SEATS (20 LOWER + 20 UPPER for each bus)
 -- =============================================================================
 -- Helper: bus-001 seats
-INSERT INTO bus_seats (bus_seat_id, bus_id, seat_number, seat_position, is_active, created_at, updated_at) VALUES
+INSERT IGNORE INTO bus_seats (bus_seat_id, bus_id, seat_number, seat_position, is_active, created_at, updated_at) VALUES
   ('bs-001-L01','bus-001','L1','LOWER',true,NOW(),NOW()),('bs-001-L02','bus-001','L2','LOWER',true,NOW(),NOW()),
   ('bs-001-L03','bus-001','L3','LOWER',true,NOW(),NOW()),('bs-001-L04','bus-001','L4','LOWER',true,NOW(),NOW()),
   ('bs-001-L05','bus-001','L5','LOWER',true,NOW(),NOW()),('bs-001-L06','bus-001','L6','LOWER',true,NOW(),NOW()),
@@ -119,7 +126,7 @@ INSERT INTO bus_seats (bus_seat_id, bus_id, seat_number, seat_position, is_activ
   ('bs-001-U19','bus-001','U19','UPPER',true,NOW(),NOW()),('bs-001-U20','bus-001','U20','UPPER',true,NOW(),NOW());
 
 -- bus-002 seats
-INSERT INTO bus_seats (bus_seat_id, bus_id, seat_number, seat_position, is_active, created_at, updated_at) VALUES
+INSERT IGNORE INTO bus_seats (bus_seat_id, bus_id, seat_number, seat_position, is_active, created_at, updated_at) VALUES
   ('bs-002-L01','bus-002','L1','LOWER',true,NOW(),NOW()),('bs-002-L02','bus-002','L2','LOWER',true,NOW(),NOW()),
   ('bs-002-L03','bus-002','L3','LOWER',true,NOW(),NOW()),('bs-002-L04','bus-002','L4','LOWER',true,NOW(),NOW()),
   ('bs-002-L05','bus-002','L5','LOWER',true,NOW(),NOW()),('bs-002-L06','bus-002','L6','LOWER',true,NOW(),NOW()),
@@ -142,7 +149,7 @@ INSERT INTO bus_seats (bus_seat_id, bus_id, seat_number, seat_position, is_activ
   ('bs-002-U19','bus-002','U19','UPPER',true,NOW(),NOW()),('bs-002-U20','bus-002','U20','UPPER',true,NOW(),NOW());
 
 -- bus-003 seats (all LOWER for seater bus)
-INSERT INTO bus_seats (bus_seat_id, bus_id, seat_number, seat_position, is_active, created_at, updated_at) VALUES
+INSERT IGNORE INTO bus_seats (bus_seat_id, bus_id, seat_number, seat_position, is_active, created_at, updated_at) VALUES
   ('bs-003-01','bus-003','1','LOWER',true,NOW(),NOW()),('bs-003-02','bus-003','2','LOWER',true,NOW(),NOW()),
   ('bs-003-03','bus-003','3','LOWER',true,NOW(),NOW()),('bs-003-04','bus-003','4','LOWER',true,NOW(),NOW()),
   ('bs-003-05','bus-003','5','LOWER',true,NOW(),NOW()),('bs-003-06','bus-003','6','LOWER',true,NOW(),NOW()),
@@ -167,46 +174,46 @@ INSERT INTO bus_seats (bus_seat_id, bus_id, seat_number, seat_position, is_activ
 -- =============================================================================
 -- ROUTES
 -- =============================================================================
-INSERT INTO routes (route_id, source_city, destination_city, distance_km, duration_minutes, is_active, created_at, updated_at)
+INSERT IGNORE INTO routes (route_id, source, destination, distance, is_active, created_at, updated_at)
 VALUES
-  ('rt-001', 'Bangalore', 'Chennai',    346, 360, true, NOW(), NOW()),
-  ('rt-002', 'Bangalore', 'Hyderabad',  574, 480, true, NOW(), NOW()),
-  ('rt-003', 'Chennai',   'Hyderabad',  627, 540, true, NOW(), NOW());
+  ('rt-001', 'Bangalore', 'Chennai',    346, true, NOW(), NOW()),
+  ('rt-002', 'Bangalore', 'Hyderabad',  574, true, NOW(), NOW()),
+  ('rt-003', 'Chennai',   'Hyderabad',  627, true, NOW(), NOW());
 
 -- =============================================================================
 -- ROUTE STOPS (Bangalore → Chennai)
 -- =============================================================================
-INSERT INTO route_stops (route_stop_id, route_id, stop_name, stop_type, sequence_order, landmark, default_time_offset_minutes, created_at, updated_at)
+INSERT IGNORE INTO route_stops (route_stop_id, route_id, stop_name, stop_type, stop_sequence, distance_from_source_km, can_board, can_drop)
 VALUES
-  ('rs-001-1', 'rt-001', 'Majestic Bus Stand, Bangalore', 'BOARDING', 1, 'Majestic Metro Station',  0, NOW(), NOW()),
-  ('rs-001-2', 'rt-001', 'Hosur Toll',                   'TRANSIT',  2, 'Hosur Petrol Pump',       45, NOW(), NOW()),
-  ('rs-001-3', 'rt-001', 'Vellore',                      'TRANSIT',  3, 'CMC Hospital',           150, NOW(), NOW()),
-  ('rs-001-4', 'rt-001', 'Koyambedu, Chennai',           'DROPPING', 4, 'Koyambedu Bus Terminus', 360, NOW(), NOW()),
-  ('rs-001-5', 'rt-001', 'Kilpauk, Chennai',             'DROPPING', 5, 'Kilpauk Medical College', 375, NOW(), NOW());
+  ('rs-001-1', 'rt-001', 'Majestic Bus Stand, Bangalore', 'BOARDING', 1, 0, true, true),
+  ('rs-001-2', 'rt-001', 'Hosur Toll', 'INTERMEDIATE', 2, 45, true, true),
+  ('rs-001-3', 'rt-001', 'Vellore', 'INTERMEDIATE', 3, 150, true, true),
+  ('rs-001-4', 'rt-001', 'Koyambedu, Chennai', 'DROPPING', 4, 360, true, true),
+  ('rs-001-5', 'rt-001', 'Kilpauk, Chennai', 'DROPPING', 5, 375, true, true);
 
 -- Route Stops (Bangalore → Hyderabad)
-INSERT INTO route_stops (route_stop_id, route_id, stop_name, stop_type, sequence_order, landmark, default_time_offset_minutes, created_at, updated_at)
+INSERT IGNORE INTO route_stops (route_stop_id, route_id, stop_name, stop_type, stop_sequence, distance_from_source_km, can_board, can_drop)
 VALUES
-  ('rs-002-1', 'rt-002', 'Majestic Bus Stand, Bangalore', 'BOARDING', 1, 'Majestic Metro Station',    0, NOW(), NOW()),
-  ('rs-002-2', 'rt-002', 'Tumkur',                        'TRANSIT',  2, 'Tumkur Bus Stand',         60, NOW(), NOW()),
-  ('rs-002-3', 'rt-002', 'Ananthapura',                   'TRANSIT',  3, 'Ananthapura Lake',        240, NOW(), NOW()),
-  ('rs-002-4', 'rt-002', 'Mehdipatnam, Hyderabad',        'DROPPING', 4, 'Mehdipatnam X-Roads',     480, NOW(), NOW()),
-  ('rs-002-5', 'rt-002', 'Secunderabad',                  'DROPPING', 5, 'Secunderabad Station',    510, NOW(), NOW());
+  ('rs-002-1', 'rt-002', 'Majestic Bus Stand, Bangalore', 'BOARDING', 1, 0, true, true),
+  ('rs-002-2', 'rt-002', 'Tumkur', 'INTERMEDIATE', 2, 60, true, true),
+  ('rs-002-3', 'rt-002', 'Ananthapura', 'INTERMEDIATE', 3, 240, true, true),
+  ('rs-002-4', 'rt-002', 'Mehdipatnam, Hyderabad', 'DROPPING', 4, 480, true, true),
+  ('rs-002-5', 'rt-002', 'Secunderabad', 'DROPPING', 5, 510, true, true);
 
 -- =============================================================================
 -- TRIPS (4 trips across routes)
 -- =============================================================================
-INSERT INTO trips (trip_id, bus_id, route_id, travel_date, departure_time, arrival_time, base_fare, is_cancelled, cancellation_reason, created_at, updated_at)
+INSERT IGNORE INTO trips (trip_id, bus_id, route_id, travel_date, departure_time, arrival_time, arrival_date, base_fare, is_cancelled, cancellation_reason, version, created_at, updated_at)
 VALUES
-  ('trip-001', 'bus-001', 'rt-001', CURDATE() + INTERVAL 1 DAY, '21:00:00', '03:00:00', 1200.00, false, NULL, NOW(), NOW()),
-  ('trip-002', 'bus-002', 'rt-001', CURDATE() + INTERVAL 1 DAY, '22:00:00', '05:00:00',  899.00, false, NULL, NOW(), NOW()),
-  ('trip-003', 'bus-003', 'rt-002', CURDATE() + INTERVAL 2 DAY, '20:00:00', '04:00:00', 1500.00, false, NULL, NOW(), NOW()),
-  ('trip-004', 'bus-004', 'rt-001', CURDATE() + INTERVAL 3 DAY, '23:00:00', '05:30:00', 1100.00, false, NULL, NOW(), NOW());
+  ('trip-001', 'bus-001', 'rt-001', CURDATE() + INTERVAL 1 DAY, '21:00:00', '03:00:00', CURDATE() + INTERVAL 2 DAY, 1200.00, false, NULL, 0, NOW(), NOW()),
+  ('trip-002', 'bus-002', 'rt-001', CURDATE() + INTERVAL 1 DAY, '22:00:00', '05:00:00', CURDATE() + INTERVAL 2 DAY,  899.00, false, NULL, 0, NOW(), NOW()),
+  ('trip-003', 'bus-003', 'rt-002', CURDATE() + INTERVAL 2 DAY, '20:00:00', '04:00:00', CURDATE() + INTERVAL 3 DAY, 1500.00, false, NULL, 0, NOW(), NOW()),
+  ('trip-004', 'bus-004', 'rt-001', CURDATE() + INTERVAL 3 DAY, '23:00:00', '05:30:00', CURDATE() + INTERVAL 4 DAY, 1100.00, false, NULL, 0, NOW(), NOW());
 
 -- =============================================================================
 -- TRIP SEATS for trip-001 (bus-001: 40 seats, AC Sleeper)
 -- =============================================================================
-INSERT INTO trip_seats (trip_seat_id, trip_id, bus_seat_id, seat_status, seat_fare, lock_expiry_time, locked_by_user_id, version, created_at, updated_at) VALUES
+INSERT IGNORE INTO trip_seats (trip_seat_id, trip_id, bus_seat_id, seat_status, seat_fare, lock_expiry_time, locked_by_user_id, version, created_at, updated_at) VALUES
   ('ts-t1-L01','trip-001','bs-001-L01','AVAILABLE',1200.00,NULL,NULL,0,NOW(),NOW()),
   ('ts-t1-L02','trip-001','bs-001-L02','AVAILABLE',1200.00,NULL,NULL,0,NOW(),NOW()),
   ('ts-t1-L03','trip-001','bs-001-L03','AVAILABLE',1200.00,NULL,NULL,0,NOW(),NOW()),
@@ -249,7 +256,7 @@ INSERT INTO trip_seats (trip_seat_id, trip_id, bus_seat_id, seat_status, seat_fa
   ('ts-t1-U20','trip-001','bs-001-U20','AVAILABLE',1000.00,NULL,NULL,0,NOW(),NOW());
 
 -- Trip-002 seats (bus-002, Non-AC Sleeper)
-INSERT INTO trip_seats (trip_seat_id, trip_id, bus_seat_id, seat_status, seat_fare, lock_expiry_time, locked_by_user_id, version, created_at, updated_at) VALUES
+INSERT IGNORE INTO trip_seats (trip_seat_id, trip_id, bus_seat_id, seat_status, seat_fare, lock_expiry_time, locked_by_user_id, version, created_at, updated_at) VALUES
   ('ts-t2-L01','trip-002','bs-002-L01','AVAILABLE',899.00,NULL,NULL,0,NOW(),NOW()),
   ('ts-t2-L02','trip-002','bs-002-L02','AVAILABLE',899.00,NULL,NULL,0,NOW(),NOW()),
   ('ts-t2-L03','trip-002','bs-002-L03','AVAILABLE',899.00,NULL,NULL,0,NOW(),NOW()),
@@ -292,7 +299,7 @@ INSERT INTO trip_seats (trip_seat_id, trip_id, bus_seat_id, seat_status, seat_fa
   ('ts-t2-U20','trip-002','bs-002-U20','AVAILABLE',749.00,NULL,NULL,0,NOW(),NOW());
 
 -- Trip-003 seats (bus-003, AC Seater, Blr → Hyd)
-INSERT INTO trip_seats (trip_seat_id, trip_id, bus_seat_id, seat_status, seat_fare, lock_expiry_time, locked_by_user_id, version, created_at, updated_at) VALUES
+INSERT IGNORE INTO trip_seats (trip_seat_id, trip_id, bus_seat_id, seat_status, seat_fare, lock_expiry_time, locked_by_user_id, version, created_at, updated_at) VALUES
   ('ts-t3-01','trip-003','bs-003-01','AVAILABLE',1500.00,NULL,NULL,0,NOW(),NOW()),
   ('ts-t3-02','trip-003','bs-003-02','AVAILABLE',1500.00,NULL,NULL,0,NOW(),NOW()),
   ('ts-t3-03','trip-003','bs-003-03','AVAILABLE',1500.00,NULL,NULL,0,NOW(),NOW()),

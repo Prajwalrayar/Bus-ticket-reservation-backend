@@ -12,4 +12,6 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicket, St
     List<SupportTicket> findByCustomer_UserId(String customerId);
 
     List<SupportTicket> findByOperator_OperatorId(String operatorId);
+
+    List<SupportTicket> findByOperator_OperatorIdOrOperatorIsNullOrderByUpdatedAtDesc(String operatorId);
 }

@@ -55,6 +55,12 @@ public class Bus {
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
+    @Column(name = "pets_allowed", nullable = false)
+    private Boolean petsAllowed = false;
+
+    @Column(name = "baggage_policy", length = 500)
+    private String baggagePolicy;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

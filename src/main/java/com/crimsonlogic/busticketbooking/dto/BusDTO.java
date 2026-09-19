@@ -23,4 +23,8 @@ public class BusDTO {
     private Boolean isActive;
 
     private String operatorCompanyName;
+
+    private Boolean petsAllowed;
+
+    private String baggagePolicy;
 }

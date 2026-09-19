@@ -23,4 +23,6 @@ public interface BusRepository extends JpaRepository<Bus, String> {
     );
 
     long countByIsActiveTrue();
+
+    long countByOperator(com.crimsonlogic.busticketbooking.entity.Operator operator);
 }

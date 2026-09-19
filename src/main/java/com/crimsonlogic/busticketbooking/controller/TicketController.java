@@ -10,12 +10,17 @@ import org.springframework.web.bind.annotation.*;
 
 import com.crimsonlogic.busticketbooking.util.QRCodeGenerator;
 
+import com.crimsonlogic.busticketbooking.service.BookingService;
+import com.crimsonlogic.busticketbooking.dto.BookingDTO;
+import java.util.stream.Collectors;
+
 @RestController
 @RequestMapping("/api/tickets")
 @RequiredArgsConstructor
 public class TicketController {
 
     private final TicketService ticketService;
+    private final BookingService bookingService;
     private final QRCodeGenerator qrCodeGenerator;
 
 
@@ -89,10 +94,18 @@ public class TicketController {
             @PathVariable String ticketNumber) {
 
         TicketDTO ticket = ticketService.getTicketByNumber(ticketNumber);
+        BookingDTO booking = bookingService.getBookingById(ticket.getBookingId());
+
+        String passengerDetails = booking.getBookingSeats().stream()
+                .map(seat -> "- " + seat.getSeatNumber() + ": " + seat.getPassengerName() + " (" + seat.getPassengerAge() + " " + seat.getPassengerGender() + ")")
+                .collect(Collectors.joining("\n"));
         
         String qrContent = "Ticket: " + ticket.getTicketNumber() + "\n" +
                            "Code: " + ticket.getVerificationCode() + "\n" +
-                           "PNR: " + ticket.getBookingId();
+                           "PNR: " + ticket.getBookingId() + "\n" +
+                           "Route: " + ticket.getSource() + " -> " + ticket.getDestination() + "\n" +
+                           "Date: " + ticket.getTravelDate() + " " + ticket.getDepartureTime() + "\n" +
+                           "Passengers:\n" + passengerDetails;
 
         try {
             byte[] qrCodeImage = qrCodeGenerator.generateQRCode(qrContent, 300, 300);

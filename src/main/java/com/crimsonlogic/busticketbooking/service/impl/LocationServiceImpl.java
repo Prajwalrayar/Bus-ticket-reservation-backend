@@ -60,6 +60,68 @@ public class LocationServiceImpl implements LocationService {
     }
 
     @Override
+    public List<String> getAllNamesForLocationNameOrAlias(String query) {
+        if (query == null || query.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+        String q = query.trim().toLowerCase();
+        java.util.Optional<Location> locationOpt = locationRepository.findByExactNameOrAlias(q);
+        if (locationOpt.isPresent()) {
+            return getAllNamesForLocationId(locationOpt.get().getLocationId());
+        }
+        
+        // Semantic meaning / Typo Correction via Levenshtein Distance
+        List<Location> allLocations = locationRepository.findAll();
+        Location bestMatch = null;
+        int bestDistance = Integer.MAX_VALUE;
+
+        for (Location loc : allLocations) {
+            if (!loc.getIsActive()) continue;
+            
+            int dist = calculateLevenshtein(q, loc.getName().toLowerCase());
+            if (dist < bestDistance) {
+                bestDistance = dist;
+                bestMatch = loc;
+            }
+
+            List<LocationAlias> aliases = locationAliasRepository.findByLocation_LocationIdAndIsActiveTrue(loc.getLocationId());
+            for (LocationAlias alias : aliases) {
+                dist = calculateLevenshtein(q, alias.getAlias().toLowerCase());
+                if (dist < bestDistance) {
+                    bestDistance = dist;
+                    bestMatch = loc;
+                }
+            }
+        }
+
+        // Allow up to 3 typos for a match
+        if (bestMatch != null && bestDistance <= 3) {
+            return getAllNamesForLocationId(bestMatch.getLocationId());
+        }
+
+        return java.util.List.of(query.trim()); // Fallback to raw string if not found
+    }
+
+    private int calculateLevenshtein(String x, String y) {
+        int[][] dp = new int[x.length() + 1][y.length() + 1];
+        for (int i = 0; i <= x.length(); i++) {
+            for (int j = 0; j <= y.length(); j++) {
+                if (i == 0) {
+                    dp[i][j] = j;
+                } else if (j == 0) {
+                    dp[i][j] = i;
+                } else {
+                    dp[i][j] = Math.min(dp[i - 1][j - 1] 
+                     + (x.charAt(i - 1) == y.charAt(j - 1) ? 0 : 1), 
+                     Math.min(dp[i - 1][j] + 1, 
+                     dp[i][j - 1] + 1));
+                }
+            }
+        }
+        return dp[x.length()][y.length()];
+    }
+
+    @Override
     public List<com.crimsonlogic.busticketbooking.dto.AdminLocationDTO> getAllAdminLocations() {
         return locationRepository.findAll().stream()
                 .map(loc -> new com.crimsonlogic.busticketbooking.dto.AdminLocationDTO(

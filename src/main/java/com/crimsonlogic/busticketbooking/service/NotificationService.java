@@ -5,6 +5,7 @@ import com.crimsonlogic.busticketbooking.entity.Booking;
 import com.crimsonlogic.busticketbooking.entity.Cancellation;
 import com.crimsonlogic.busticketbooking.entity.Notification;
 import com.crimsonlogic.busticketbooking.entity.Payment;
+import com.crimsonlogic.busticketbooking.entity.SupportTicket;
 import com.crimsonlogic.busticketbooking.enums.NotificationType;
 
 import java.util.List;
@@ -28,6 +29,12 @@ public interface NotificationService {
 
     void sendCancellationNotification(
             Cancellation cancellation
+    );
+
+    void sendSupportTicketNotification(
+            SupportTicket ticket,
+            String messageTitle,
+            String messageBody
     );
 
     List<NotificationDTO> getMyNotifications();

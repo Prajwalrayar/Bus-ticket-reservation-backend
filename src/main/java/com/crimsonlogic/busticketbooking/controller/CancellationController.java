@@ -20,6 +20,23 @@ public class CancellationController {
 
 
     // =========================================================
+    // GET CANCELLATION ESTIMATE
+    // =========================================================
+
+    @GetMapping("/bookings/{bookingId}/cancellation-estimate")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<com.crimsonlogic.busticketbooking.dto.CancellationEstimateDTO>>
+    getCancellationEstimate(
+            @PathVariable String bookingId) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        cancellationService.getCancellationEstimate(bookingId)
+                )
+        );
+    }
+
+    // =========================================================
     // CANCEL BOOKING
     // =========================================================
 
@@ -105,6 +122,40 @@ public class CancellationController {
                                 .getCancellationByReference(
                                         cancellationReference
                                 )
+                )
+        );
+    }
+
+
+    // =========================================================
+    // GET PENDING REFUNDS
+    // =========================================================
+
+    @GetMapping("/cancellations/pending")
+    @PreAuthorize("hasAnyRole('SUPPORT_AGENT', 'ADMIN')")
+    public ResponseEntity<ApiResponse<java.util.List<CancellationDTO>>> getPendingRefunds() {
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "Fetched pending refunds successfully",
+                        cancellationService.getPendingRefunds()
+                )
+        );
+    }
+
+
+    // =========================================================
+    // PROCESS REFUND
+    // =========================================================
+
+    @PutMapping("/cancellations/{cancellationId}/refund")
+    @PreAuthorize("hasAnyRole('SUPPORT_AGENT', 'ADMIN')")
+    public ResponseEntity<ApiResponse<CancellationDTO>> processRefund(
+            @PathVariable String cancellationId) {
+        
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "Refund processed successfully",
+                        cancellationService.processRefund(cancellationId)
                 )
         );
     }

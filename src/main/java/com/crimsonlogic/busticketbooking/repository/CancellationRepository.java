@@ -20,4 +20,8 @@ public interface CancellationRepository extends JpaRepository<Cancellation, Stri
     boolean existsByBooking_BookingId(
             String bookingId
     );
+
+    java.util.List<Cancellation> findByRefundStatusInOrderByCreatedAtDesc(
+            java.util.List<com.crimsonlogic.busticketbooking.enums.RefundStatus> statuses
+    );
 }

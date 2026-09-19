@@ -11,5 +11,5 @@ public interface AiChatbotService {
      * @param request The chat request containing the user's message.
      * @return ChatResponse containing the natural language reply.
      */
-    ChatResponse processChatMessage(String userId, ChatRequest request);
+    ChatResponse processChatMessage(String userId, String userRole, ChatRequest request);
 }

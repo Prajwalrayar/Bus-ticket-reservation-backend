@@ -19,6 +19,8 @@ public class OperatorServiceImpl implements OperatorService {
 
     private final OperatorRepository operatorRepository;
     private final UserRepository userRepository;
+    private final com.crimsonlogic.busticketbooking.repository.BookingRepository bookingRepository;
+    private final com.crimsonlogic.busticketbooking.repository.BusRepository busRepository;
 
     /**
      * Ensures the currently authenticated BUS_OPERATOR belongs to the given company.
@@ -234,4 +236,32 @@ public class OperatorServiceImpl implements OperatorService {
         operator.setIsActive(false);
 
         operatorRepository.save(operator);
-    }}
+    }
+
+    @Override
+    public com.crimsonlogic.busticketbooking.dto.AdminDashboardDTO getDashboardKPIs() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        com.crimsonlogic.busticketbooking.entity.User user = userRepository.findByUserEmailIgnoreCase(email)
+                .orElseThrow(() -> new AccessDeniedException("User not found"));
+        
+        Operator operator = user.getOperator();
+        if (operator == null) {
+            throw new AccessDeniedException("Operator profile not found");
+        }
+        
+        long totalBuses = busRepository.countByOperator(operator);
+        long totalBookings = bookingRepository.countByTrip_Bus_Operator(operator);
+        long confirmedBookings = bookingRepository.countByTrip_Bus_OperatorAndBookingStatus(operator, com.crimsonlogic.busticketbooking.enums.BookingStatus.CONFIRMED);
+        long cancelledBookings = bookingRepository.countByTrip_Bus_OperatorAndBookingStatus(operator, com.crimsonlogic.busticketbooking.enums.BookingStatus.CANCELLED);
+        Double revenue = bookingRepository.sumRevenueByOperatorAndStatus(operator, com.crimsonlogic.busticketbooking.enums.BookingStatus.CONFIRMED);
+        if (revenue == null) revenue = 0.0;
+
+        com.crimsonlogic.busticketbooking.dto.AdminDashboardDTO dash = new com.crimsonlogic.busticketbooking.dto.AdminDashboardDTO();
+        dash.setTotalBuses(totalBuses);
+        dash.setTotalBookings(totalBookings);
+        dash.setConfirmedBookings(confirmedBookings);
+        dash.setCancelledBookings(cancelledBookings);
+        dash.setTotalRevenue(revenue);
+        return dash;
+    }
+}
