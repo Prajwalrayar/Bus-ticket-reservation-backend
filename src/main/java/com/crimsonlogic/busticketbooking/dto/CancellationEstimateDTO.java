@@ -18,4 +18,7 @@ public class CancellationEstimateDTO {
     private BigDecimal cancellationFee;
     private BigDecimal refundAmount;
     private String ruleApplied;
+    private String paymentMethod;
+    private String paymentProvider;
+    private String refundDestination;
 }

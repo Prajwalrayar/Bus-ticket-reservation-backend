@@ -11,5 +11,6 @@ public enum NotificationType {
     DELAY_ALERT,
     PASSWORD_RESET,
     RECOMMENDATION,
-    OFFER
+    OFFER,
+    SUPPORT_TICKET_UPDATE
 }

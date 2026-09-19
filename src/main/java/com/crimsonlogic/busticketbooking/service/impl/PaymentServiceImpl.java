@@ -294,6 +294,33 @@ public class PaymentServiceImpl implements PaymentService {
                 payment.setPaymentCompletedAt(LocalDateTime.now());
                 payment.setGatewayTransactionId(request.getRazorpayPaymentId());
                 
+                try {
+                    com.razorpay.Payment rzpPayment = razorpayClient.payments.fetch(request.getRazorpayPaymentId());
+                    if (rzpPayment != null) {
+                        String method = rzpPayment.get("method");
+                        if ("netbanking".equals(method)) {
+                            payment.setPaymentMethod("NETBANKING");
+                            payment.setPaymentProvider(rzpPayment.get("bank"));
+                        } else if ("card".equals(method)) {
+                            payment.setPaymentMethod("CREDIT/DEBIT CARD");
+                            if (rzpPayment.has("card") && rzpPayment.get("card") != null) {
+                                JSONObject cardObj = new JSONObject(rzpPayment.get("card").toString());
+                                payment.setPaymentProvider(cardObj.optString("network", "") + " " + cardObj.optString("type", ""));
+                            }
+                        } else if ("upi".equals(method)) {
+                            payment.setPaymentMethod("UPI");
+                            payment.setPaymentProvider(rzpPayment.get("vpa"));
+                        } else if ("wallet".equals(method)) {
+                            payment.setPaymentMethod("WALLET");
+                            payment.setPaymentProvider(rzpPayment.get("wallet"));
+                        } else {
+                            payment.setPaymentMethod(method != null ? method.toUpperCase() : "ONLINE");
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to fetch payment details from Razorpay: {}", e.getMessage());
+                }
+                
                 booking.setBookingStatus(BookingStatus.CONFIRMED);
                 
                 if (booking.getBookingSeats() != null) {

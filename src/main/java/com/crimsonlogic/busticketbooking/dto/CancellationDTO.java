@@ -36,4 +36,10 @@ public class CancellationDTO {
     private String cancelledByUserId;
 
     private String paymentTransactionId;
+
+    private String ruleApplied;
+
+    private String paymentMethod;
+    private String paymentProvider;
+    private String refundDestination;
 }

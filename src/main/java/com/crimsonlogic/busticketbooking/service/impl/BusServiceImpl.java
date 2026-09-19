@@ -116,6 +116,9 @@ public class BusServiceImpl implements BusService {
 
         bus.setOperator(operator);
         bus.setIsActive(true);
+        
+        bus.setPetsAllowed(request.getPetsAllowed() != null ? request.getPetsAllowed() : false);
+        bus.setBaggagePolicy(request.getBaggagePolicy());
 
         return convertToBusDTO(
                 busRepository.save(bus)
@@ -249,6 +252,13 @@ public class BusServiceImpl implements BusService {
             existingBus.setAmenities(
                     request.getAmenities()
             );
+        }
+        
+        if (request.getPetsAllowed() != null) {
+            existingBus.setPetsAllowed(request.getPetsAllowed());
+        }
+        if (request.getBaggagePolicy() != null) {
+            existingBus.setBaggagePolicy(request.getBaggagePolicy());
         }
 
         /*
@@ -546,6 +556,9 @@ public class BusServiceImpl implements BusService {
                             .getCompanyName()
             );
         }
+        
+        dto.setPetsAllowed(bus.getPetsAllowed());
+        dto.setBaggagePolicy(bus.getBaggagePolicy());
 
         return dto;
     }

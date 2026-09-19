@@ -897,6 +897,10 @@ public class BookingServiceImpl implements BookingService {
                 booking.getCreatedAt()
         );
 
+        dto.setOfferCodeUsed(
+                booking.getOfferCodeUsed()
+        );
+
         dto.setExpiryTime(
                 booking.getExpiryTime()
         );
@@ -944,6 +948,19 @@ public class BookingServiceImpl implements BookingService {
                     booking.getTrip()
                             .getTripId()
             );
+
+            if (booking.getTrip().getRoute() != null) {
+                dto.setTripSource(booking.getTrip().getRoute().getSource());
+                dto.setTripDestination(booking.getTrip().getRoute().getDestination());
+            }
+
+            dto.setTripTravelDate(booking.getTrip().getTravelDate());
+            dto.setTripDepartureTime(booking.getTrip().getDepartureTime());
+
+            if (booking.getTrip().getBus() != null) {
+                dto.setBusName(booking.getTrip().getBus().getRegistrationNumber()
+                        + " (" + booking.getTrip().getBus().getBusType() + ")");
+            }
         }
 
 

@@ -5,6 +5,7 @@ import com.crimsonlogic.busticketbooking.entity.Booking;
 import com.crimsonlogic.busticketbooking.entity.Cancellation;
 import com.crimsonlogic.busticketbooking.entity.Notification;
 import com.crimsonlogic.busticketbooking.entity.Payment;
+import com.crimsonlogic.busticketbooking.entity.SupportTicket;
 import com.crimsonlogic.busticketbooking.entity.User;
 import com.crimsonlogic.busticketbooking.enums.NotificationType;
 import com.crimsonlogic.busticketbooking.repository.NotificationRepository;
@@ -147,6 +148,29 @@ public class NotificationServiceImpl implements NotificationService {
                 "Your booking "
                         + booking.getBookingReference()
                         + " has been cancelled."
+        );
+    }
+
+
+    // =========================================================
+    // GET NOTIFICATIONS
+    // =========================================================
+
+    @Override
+    public void sendSupportTicketNotification(
+            SupportTicket ticket,
+            String messageTitle,
+            String messageBody) {
+
+        if (ticket.getCustomer() == null) {
+            return;
+        }
+
+        createNotification(
+                ticket.getCustomer().getUserId(),
+                NotificationType.SUPPORT_TICKET_UPDATE,
+                messageTitle,
+                messageBody
         );
     }
 

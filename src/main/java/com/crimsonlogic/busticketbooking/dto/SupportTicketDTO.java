@@ -10,9 +10,14 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class SupportTicketDTO {
     private String ticketId;
+    private String issueCategory;
+    private String issueType;
     private String issueSubject;
     private String issueDescription;
+    private String attachmentPath;
     private SupportTicketStatus status;
+    private com.crimsonlogic.busticketbooking.enums.SupportTicketPriority priority;
+    private LocalDateTime resolvedAt;
     private String bookingReference;
     private String customerId;
     private String customerName;

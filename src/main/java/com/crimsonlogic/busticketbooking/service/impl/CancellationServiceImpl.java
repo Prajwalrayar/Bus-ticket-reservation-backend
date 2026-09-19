@@ -79,6 +79,29 @@ public class CancellationServiceImpl
 
         BigDecimal cancellationFee = booking.getTotalAmount().multiply(cancellationFeePercentage);
         BigDecimal refundAmount = booking.getTotalAmount().subtract(cancellationFee);
+        
+        String paymentMethod = null;
+        String paymentProvider = null;
+        String refundDestination = null;
+        
+        com.crimsonlogic.busticketbooking.entity.Payment successfulPayment = booking.getPayments().stream()
+                .filter(p -> p.getPaymentStatus() == com.crimsonlogic.busticketbooking.enums.PaymentStatus.SUCCESS)
+                .findFirst()
+                .orElse(null);
+                
+        if (successfulPayment != null) {
+            paymentMethod = successfulPayment.getPaymentMethod();
+            paymentProvider = successfulPayment.getPaymentProvider();
+            
+            if ("WALLET".equalsIgnoreCase(paymentMethod)) {
+                refundDestination = "Wallet Balance";
+            } else {
+                refundDestination = "Original Payment Method";
+                if (paymentProvider != null && !paymentProvider.isEmpty()) {
+                    refundDestination += " (" + paymentProvider + ")";
+                }
+            }
+        }
 
         return com.crimsonlogic.busticketbooking.dto.CancellationEstimateDTO.builder()
                 .bookingId(bookingId)
@@ -87,6 +110,9 @@ public class CancellationServiceImpl
                 .cancellationFee(cancellationFee)
                 .refundAmount(refundAmount)
                 .ruleApplied(ruleApplied)
+                .paymentMethod(paymentMethod)
+                .paymentProvider(paymentProvider)
+                .refundDestination(refundDestination)
                 .build();
     }
 
@@ -562,18 +588,46 @@ public class CancellationServiceImpl
         if (cancellation.getBooking() != null) {
             dto.setBookingId(cancellation.getBooking().getBookingId());
             
-            // Find the completed payment for the booking to get the transaction ID
+            // Calculate and set ruleApplied
+            LocalDateTime departureTime = LocalDateTime.of(cancellation.getBooking().getTrip().getTravelDate(), cancellation.getBooking().getTrip().getDepartureTime());
+            long hoursUntilDeparture = ChronoUnit.HOURS.between(cancellation.getCancelledAt(), departureTime);
+            String ruleApplied = "";
+            if (hoursUntilDeparture > 24) {
+                ruleApplied = "More than 24 hours before departure (10% fee)";
+            } else if (hoursUntilDeparture > 12) {
+                ruleApplied = "Between 12 and 24 hours before departure (50% fee)";
+            } else {
+                ruleApplied = "Less than 12 hours before departure (100% fee)";
+            }
+            dto.setRuleApplied(ruleApplied);
+            
+            // Populate payment details
             if (cancellation.getBooking().getPayments() != null) {
-                cancellation.getBooking().getPayments().stream()
-                    .filter(p -> com.crimsonlogic.busticketbooking.enums.PaymentStatus.SUCCESS.equals(p.getPaymentStatus()))
-                    .findFirst()
-                    .ifPresent(p -> {
-                        if (p.getGatewayTransactionId() != null && !p.getGatewayTransactionId().isEmpty()) {
-                            dto.setPaymentTransactionId(p.getGatewayTransactionId());
-                        } else {
-                            dto.setPaymentTransactionId(p.getTransactionReference());
+                com.crimsonlogic.busticketbooking.entity.Payment successfulPayment = cancellation.getBooking().getPayments().stream()
+                        .filter(p -> com.crimsonlogic.busticketbooking.enums.PaymentStatus.SUCCESS.equals(p.getPaymentStatus()))
+                        .findFirst()
+                        .orElse(null);
+                        
+                if (successfulPayment != null) {
+                    if (successfulPayment.getGatewayTransactionId() != null && !successfulPayment.getGatewayTransactionId().isEmpty()) {
+                        dto.setPaymentTransactionId(successfulPayment.getGatewayTransactionId());
+                    } else {
+                        dto.setPaymentTransactionId(successfulPayment.getTransactionReference());
+                    }
+                    
+                    dto.setPaymentMethod(successfulPayment.getPaymentMethod());
+                    dto.setPaymentProvider(successfulPayment.getPaymentProvider());
+                    
+                    if ("WALLET".equalsIgnoreCase(successfulPayment.getPaymentMethod())) {
+                        dto.setRefundDestination("Wallet Balance");
+                    } else {
+                        String dest = "Original Payment Method";
+                        if (successfulPayment.getPaymentProvider() != null && !successfulPayment.getPaymentProvider().isEmpty()) {
+                            dest += " (" + successfulPayment.getPaymentProvider() + ")";
                         }
-                    });
+                        dto.setRefundDestination(dest);
+                    }
+                }
             }
         }
         

@@ -76,6 +76,12 @@ public class Payment {
     )
     private String failureCode;
 
+    @Column(
+            name = "payment_provider",
+            length = 100
+    )
+    private String paymentProvider;
+
     @Column(name = "payment_initiated_at")
     private LocalDateTime paymentInitiatedAt;
 
