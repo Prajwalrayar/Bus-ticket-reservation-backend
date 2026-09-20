@@ -61,8 +61,15 @@ public class CancellationServiceImpl
         }
 
         LocalDateTime departureTime = LocalDateTime.of(booking.getTrip().getTravelDate(), booking.getTrip().getDepartureTime());
-        long hoursUntilDeparture = ChronoUnit.HOURS.between(LocalDateTime.now(), departureTime);
+        long minutesUntilDeparture = ChronoUnit.MINUTES.between(LocalDateTime.now(), departureTime);
         
+        if (minutesUntilDeparture < 0) {
+            throw new IllegalArgumentException("Your trip has already started you cannot cancel now");
+        } else if (minutesUntilDeparture < 120) {
+            throw new IllegalArgumentException("Your trip is about to start within 2 hours so you cannot cancel the booking");
+        }
+        
+        long hoursUntilDeparture = ChronoUnit.HOURS.between(LocalDateTime.now(), departureTime);
         BigDecimal cancellationFeePercentage = BigDecimal.ZERO;
         String ruleApplied = "";
         
@@ -202,8 +209,15 @@ public class CancellationServiceImpl
          * Calculate cancellation fee dynamically based on departure time.
          */
         LocalDateTime departureTime = LocalDateTime.of(booking.getTrip().getTravelDate(), booking.getTrip().getDepartureTime());
-        long hoursUntilDeparture = ChronoUnit.HOURS.between(LocalDateTime.now(), departureTime);
+        long minutesUntilDeparture = ChronoUnit.MINUTES.between(LocalDateTime.now(), departureTime);
         
+        if (minutesUntilDeparture < 0) {
+            throw new IllegalArgumentException("Your trip has already started you cannot cancel now");
+        } else if (minutesUntilDeparture < 120) {
+            throw new IllegalArgumentException("Your trip is about to start within 2 hours so you cannot cancel the booking");
+        }
+        
+        long hoursUntilDeparture = ChronoUnit.HOURS.between(LocalDateTime.now(), departureTime);
         BigDecimal cancellationFeePercentage = BigDecimal.ZERO;
         
         if (hoursUntilDeparture > 24) {

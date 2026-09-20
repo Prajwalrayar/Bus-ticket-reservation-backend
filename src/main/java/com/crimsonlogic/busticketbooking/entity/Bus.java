@@ -1,13 +1,14 @@
 package com.crimsonlogic.busticketbooking.entity;
 
 import com.crimsonlogic.busticketbooking.util.EntityIdGenerator;
-
 import com.crimsonlogic.busticketbooking.enums.BusType;
-import com.crimsonlogic.busticketbooking.entity.Operator;
+import com.crimsonlogic.busticketbooking.enums.BusActivationStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
@@ -60,6 +61,33 @@ public class Bus {
 
     @Column(name = "baggage_policy", length = 500)
     private String baggagePolicy;
+
+    /** Date of the most recent trip operated by this bus. Updated on trip creation. */
+    @Column(name = "last_trip_date")
+    private LocalDate lastTripDate;
+
+    /** Tracks whether an operator has submitted an activation request. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "activation_request_status", nullable = false, length = 20)
+    private BusActivationStatus activationRequestStatus = BusActivationStatus.NONE;
+
+    /** Operator's reason for requesting reactivation. */
+    @Column(name = "activation_request_note", length = 1000)
+    private String activationRequestNote;
+
+    /** Compensation fee set by the admin upon approval. */
+    @Column(name = "compensation_amount", precision = 10, scale = 2)
+    private BigDecimal compensationAmount;
+
+    /** Admin's note if the request is rejected. */
+    @Column(name = "admin_rejection_note", length = 500)
+    private String adminRejectionNote;
+
+    @Column(name = "activation_requested_at")
+    private LocalDateTime activationRequestedAt;
+
+    @Column(name = "activation_approved_at")
+    private LocalDateTime activationApprovedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

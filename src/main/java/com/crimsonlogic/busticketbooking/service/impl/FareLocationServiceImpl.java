@@ -55,7 +55,7 @@ public class FareLocationServiceImpl implements FareLocationService {
     @Transactional(readOnly = true)
     public List<FareLocationDTO> getFareLocations(String source, String destination) {
         return fareLocationRepository
-                .findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCase(source, destination)
+                .findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseOrderByCreatedAtAsc(source, destination)
                 .stream()
                 .map(this::convertToDTO)
                 .toList();

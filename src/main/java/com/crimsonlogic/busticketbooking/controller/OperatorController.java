@@ -112,4 +112,15 @@ public class OperatorController {
                 )
         );
     }
+    @GetMapping("/support-agents")
+    @PreAuthorize("hasRole('BUS_OPERATOR')")
+    public ResponseEntity<ApiResponse<List<com.crimsonlogic.busticketbooking.dto.UserDTO>>> getSupportAgents(
+            org.springframework.security.core.Authentication authentication) {
+        
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        userService.getSupportAgentsForOperator(authentication.getName())
+                )
+        );
+    }
 }

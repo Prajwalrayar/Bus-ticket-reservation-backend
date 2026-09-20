@@ -32,4 +32,6 @@ public interface UserService {
     User getCurrentAuthenticatedUser();
 
     UserDTO createSupportAgentForOperator(com.crimsonlogic.busticketbooking.dto.SupportAgentCreateRequest request, String busOperatorEmail);
+
+    List<UserDTO> getSupportAgentsForOperator(String busOperatorEmail);
 }
