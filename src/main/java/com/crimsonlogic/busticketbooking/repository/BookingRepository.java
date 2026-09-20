@@ -50,7 +50,7 @@ public interface BookingRepository extends JpaRepository<Booking, String> {
     @Query("SELECT COUNT(b) FROM Booking b " +
            "WHERE b.trip.bus.busId = :busId " +
            "AND b.bookingStatus IN :statuses " +
-           "AND b.trip.travelDate > CURRENT_DATE")
+           "AND b.trip.travelDate >= CURRENT_DATE")
     long countActiveFutureBookingsByBusId(
             @Param("busId") String busId,
             @Param("statuses") List<BookingStatus> statuses
@@ -69,7 +69,7 @@ public interface BookingRepository extends JpaRepository<Booking, String> {
     @Query("SELECT COUNT(b) FROM Booking b " +
            "WHERE b.trip.route.routeId = :routeId " +
            "AND b.bookingStatus IN :statuses " +
-           "AND b.trip.travelDate > CURRENT_DATE")
+           "AND b.trip.travelDate >= CURRENT_DATE")
     long countActiveFutureBookingsByRouteId(
             @Param("routeId") String routeId,
             @Param("statuses") List<BookingStatus> statuses

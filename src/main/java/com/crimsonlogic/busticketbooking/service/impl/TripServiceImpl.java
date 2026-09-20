@@ -73,6 +73,10 @@ public class TripServiceImpl implements TripService {
     public TripDTO createTrip(
             TripCreateRequest request) {
 
+        if (request != null && request.getSegments() != null) {
+            validateSegmentsTiming(request.getSegments());
+        }
+
         validateTripRequest(request);
 
         Bus bus = findBus(
@@ -138,13 +142,34 @@ public class TripServiceImpl implements TripService {
 
         if (request.getSegments() != null && !request.getSegments().isEmpty()) {
             if (derivedDeparture == null) {
-                derivedDeparture = request.getSegments().get(0).getDepartureTime();
+                com.crimsonlogic.busticketbooking.dto.TripSegmentCreateRequest firstSeg = request.getSegments().stream()
+                        .min(java.util.Comparator.comparingDouble(seg -> {
+                            return route.getRouteStops().stream()
+                                    .filter(rs -> rs.getRouteStopId().equals(seg.getBoardingStopId()))
+                                    .findFirst()
+                                    .map(rs -> rs.getDistanceFromSourceKm().doubleValue())
+                                    .orElse(Double.MAX_VALUE);
+                        }))
+                        .orElse(request.getSegments().get(0));
+                derivedDeparture = firstSeg.getDepartureTime();
             }
-            if (derivedArrival == null) {
-                derivedArrival = request.getSegments().get(request.getSegments().size() - 1).getArrivalTime();
-            }
-            if (derivedArrivalDate == null) {
-                derivedArrivalDate = request.getSegments().get(request.getSegments().size() - 1).getArrivalDate();
+            if (derivedArrival == null || derivedArrivalDate == null) {
+                com.crimsonlogic.busticketbooking.dto.TripSegmentCreateRequest lastSeg = request.getSegments().stream()
+                        .max(java.util.Comparator.comparingDouble(seg -> {
+                            return route.getRouteStops().stream()
+                                    .filter(rs -> rs.getRouteStopId().equals(seg.getDroppingStopId()))
+                                    .findFirst()
+                                    .map(rs -> rs.getDistanceFromSourceKm().doubleValue())
+                                    .orElse(Double.MIN_VALUE);
+                        }))
+                        .orElse(request.getSegments().get(request.getSegments().size() - 1));
+                
+                if (derivedArrival == null) {
+                    derivedArrival = lastSeg.getArrivalTime();
+                }
+                if (derivedArrivalDate == null) {
+                    derivedArrivalDate = lastSeg.getArrivalDate();
+                }
             }
         }
 
@@ -163,6 +188,13 @@ public class TripServiceImpl implements TripService {
 
         Trip savedTrip =
                 tripRepository.save(trip);
+
+        // Update the bus's last trip date so the auto-deactivation scheduler
+        // can correctly detect inactivity.
+        if (bus.getLastTripDate() == null || request.getTravelDate().isAfter(bus.getLastTripDate())) {
+            bus.setLastTripDate(request.getTravelDate());
+            busRepository.save(bus);
+        }
 
         /*
          * Create TripSeat inventory based on the physical BusSeat layout.
@@ -219,6 +251,10 @@ public class TripServiceImpl implements TripService {
             LocalDate travelDate,
             TripCreateRequest request) {
 
+        if (request != null && request.getSegments() != null) {
+            validateSegmentsTiming(request.getSegments());
+        }
+
         Trip trip = findTrip(
                 busRegistrationNumber,
                 source,
@@ -241,9 +277,18 @@ public class TripServiceImpl implements TripService {
                         trip.getDepartureTime()
                 );
 
-        if (!departure.isAfter(LocalDateTime.now())) {
+        if (LocalDateTime.now().plusHours(5).isAfter(departure)) {
             throw new IllegalArgumentException(
-                    "Past or ongoing trip cannot be updated"
+                    "Trip cannot be updated within 5 hours of departure"
+            );
+        }
+        
+        if (!trip.getBus().getRegistrationNumber().equalsIgnoreCase(request.getBusRegistrationNumber()) ||
+            !trip.getRoute().getSource().equalsIgnoreCase(request.getSource()) ||
+            !trip.getRoute().getDestination().equalsIgnoreCase(request.getDestination()) ||
+            !trip.getTravelDate().equals(request.getTravelDate())) {
+            throw new IllegalArgumentException(
+                    "Cannot modify core trip details (Bus, Route, or Date) during an update."
             );
         }
 
@@ -334,12 +379,14 @@ public class TripServiceImpl implements TripService {
                 request.getBaseFare()
         );
 
-        Trip savedTrip = tripRepository.save(trip);
+        java.util.List<com.crimsonlogic.busticketbooking.entity.TripSegment> existingSegments = trip.getTripSegments();
+        if (existingSegments == null) {
+            existingSegments = new java.util.ArrayList<>();
+            trip.setTripSegments(existingSegments);
+        }
 
-        // Delete existing segments first
-        tripSegmentRepository.deleteAll(tripSegmentRepository.findByTrip_TripId(savedTrip.getTripId()));
-        
-        java.util.List<com.crimsonlogic.busticketbooking.entity.TripSegment> segmentsToSave = new java.util.ArrayList<>();
+        java.util.List<com.crimsonlogic.busticketbooking.entity.TripSegment> retainedSegments = new java.util.ArrayList<>();
+
         if (request.getSegments() != null) {
             for (com.crimsonlogic.busticketbooking.dto.TripSegmentCreateRequest segReq : request.getSegments()) {
                 com.crimsonlogic.busticketbooking.entity.RouteStop bStop = routeStopRepository.findById(segReq.getBoardingStopId())
@@ -347,23 +394,40 @@ public class TripServiceImpl implements TripService {
                 com.crimsonlogic.busticketbooking.entity.RouteStop dStop = routeStopRepository.findById(segReq.getDroppingStopId())
                         .orElseThrow(() -> new IllegalArgumentException("Dropping stop not found"));
 
-                com.crimsonlogic.busticketbooking.entity.TripSegment ts = new com.crimsonlogic.busticketbooking.entity.TripSegment();
-                ts.setTrip(savedTrip);
-                ts.setBoardingStop(bStop);
-                ts.setDroppingStop(dStop);
-                ts.setDepartureTime(segReq.getDepartureTime());
-                ts.setArrivalTime(segReq.getArrivalTime());
-                ts.setDepartureDate(segReq.getDepartureDate() != null ? segReq.getDepartureDate() : savedTrip.getTravelDate());
-                ts.setArrivalDate(segReq.getArrivalDate() != null ? segReq.getArrivalDate() : savedTrip.getTravelDate());
-                ts.setFare(segReq.getFare());
-                segmentsToSave.add(ts);
+                com.crimsonlogic.busticketbooking.entity.TripSegment existingTs = null;
+                for (com.crimsonlogic.busticketbooking.entity.TripSegment ts : existingSegments) {
+                    if (ts.getBoardingStop().getRouteStopId().equals(bStop.getRouteStopId()) &&
+                        ts.getDroppingStop().getRouteStopId().equals(dStop.getRouteStopId())) {
+                        existingTs = ts;
+                        break;
+                    }
+                }
+
+                if (existingTs != null) {
+                    existingTs.setDepartureTime(segReq.getDepartureTime());
+                    existingTs.setArrivalTime(segReq.getArrivalTime());
+                    existingTs.setDepartureDate(segReq.getDepartureDate() != null ? segReq.getDepartureDate() : trip.getTravelDate());
+                    existingTs.setArrivalDate(segReq.getArrivalDate() != null ? segReq.getArrivalDate() : trip.getTravelDate());
+                    existingTs.setFare(segReq.getFare());
+                    retainedSegments.add(existingTs);
+                } else {
+                    com.crimsonlogic.busticketbooking.entity.TripSegment ts = new com.crimsonlogic.busticketbooking.entity.TripSegment();
+                    ts.setTrip(trip);
+                    ts.setBoardingStop(bStop);
+                    ts.setDroppingStop(dStop);
+                    ts.setDepartureTime(segReq.getDepartureTime());
+                    ts.setArrivalTime(segReq.getArrivalTime());
+                    ts.setDepartureDate(segReq.getDepartureDate() != null ? segReq.getDepartureDate() : trip.getTravelDate());
+                    ts.setArrivalDate(segReq.getArrivalDate() != null ? segReq.getArrivalDate() : trip.getTravelDate());
+                    ts.setFare(segReq.getFare());
+                    existingSegments.add(ts);
+                    retainedSegments.add(ts);
+                }
             }
         }
         
-        if (!segmentsToSave.isEmpty()) {
-            tripSegmentRepository.saveAll(segmentsToSave);
-            savedTrip.setTripSegments(segmentsToSave);
-        }
+        existingSegments.retainAll(retainedSegments);
+        Trip savedTrip = tripRepository.save(trip);
 
         return convertToDTO(savedTrip);
     }
@@ -511,14 +575,63 @@ public class TripServiceImpl implements TripService {
             return dto;
         }
 
-        // Otherwise, calculate dynamic fare based on TripSegments
-        if (trip.getTripSegments() != null && !trip.getTripSegments().isEmpty()) {
-            for (com.crimsonlogic.busticketbooking.entity.TripSegment ts : trip.getTripSegments()) {
-                if (matchesSource.test(ts.getBoardingStop().getStopName()) &&
-                    matchesDest.test(ts.getDroppingStop().getStopName())) {
-                    dto.setBaseFare(ts.getFare());
+        // Iterate through the segments to find the sequence from source to destination
+        if (dto.getSegments() != null && !dto.getSegments().isEmpty()) {
+            int startIndex = -1;
+            int endIndex = -1;
+            
+            for (int i = 0; i < dto.getSegments().size(); i++) {
+                com.crimsonlogic.busticketbooking.dto.TripSegmentDTO ts = dto.getSegments().get(i);
+                if (startIndex == -1 && matchesSource.test(ts.getBoardingStopName())) {
+                    startIndex = i;
+                }
+                // Update endIndex whenever we find a matching drop point after the start point
+                if (startIndex != -1 && matchesDest.test(ts.getDroppingStopName())) {
+                    endIndex = i;
                     break;
                 }
+            }
+            
+            if (startIndex != -1 && endIndex != -1) {
+                // We found a valid sub-route sequence!
+                com.crimsonlogic.busticketbooking.dto.TripSegmentDTO startSegment = dto.getSegments().get(startIndex);
+                com.crimsonlogic.busticketbooking.dto.TripSegmentDTO endSegment = dto.getSegments().get(endIndex);
+                
+                dto.setSource(startSegment.getBoardingStopName());
+                dto.setDestination(endSegment.getDroppingStopName());
+                dto.setDepartureTime(startSegment.getDepartureTime());
+                dto.setTravelDate(startSegment.getDepartureDate());
+                dto.setArrivalTime(endSegment.getArrivalTime());
+                dto.setArrivalDate(endSegment.getArrivalDate());
+                
+                // If it's a single segment that matches both, use its fare.
+                // Otherwise, calculate accumulated fare or use the provided logic.
+                // Since baseFare can be dynamic, let's accumulate it from the segments if they have individual fares, 
+                // or just rely on a single covering segment if the DB stores it like that.
+                // If the DB only stores point-to-point (A->B, B->C), accumulate it:
+                java.math.BigDecimal totalFare = java.math.BigDecimal.ZERO;
+                for (int i = startIndex; i <= endIndex; i++) {
+                    if (dto.getSegments().get(i).getFare() != null) {
+                        totalFare = totalFare.add(dto.getSegments().get(i).getFare());
+                    }
+                }
+                
+                // If we accumulated a fare > 0, set it. Otherwise fallback to trip base fare.
+                if (totalFare.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    dto.setBaseFare(totalFare);
+                } else if (trip.getTripSegments() != null && !trip.getTripSegments().isEmpty()) {
+                    // Try to find a single covering segment in the DB
+                    for (com.crimsonlogic.busticketbooking.entity.TripSegment ts : trip.getTripSegments()) {
+                        if (matchesSource.test(ts.getBoardingStop().getStopName()) &&
+                            matchesDest.test(ts.getDroppingStop().getStopName())) {
+                            dto.setBaseFare(ts.getFare());
+                            break;
+                        }
+                    }
+                }
+                
+                // Finally, truncate the segments list to only include the searched sub-route
+                dto.setSegments(dto.getSegments().subList(startIndex, endIndex + 1));
             }
         }
         
@@ -957,6 +1070,69 @@ public class TripServiceImpl implements TripService {
                 tsDTO.setFare(ts.getFare());
                 return tsDTO;
             }).toList());
+        } else if (trip.getRoute() != null && trip.getRoute().getRouteStops() != null && !trip.getRoute().getRouteStops().isEmpty()) {
+            java.util.List<com.crimsonlogic.busticketbooking.entity.RouteStop> stops = trip.getRoute().getRouteStops().stream()
+                    .sorted(java.util.Comparator.comparingInt(com.crimsonlogic.busticketbooking.entity.RouteStop::getStopSequence))
+                    .toList();
+            
+            java.util.List<com.crimsonlogic.busticketbooking.dto.TripSegmentDTO> syntheticSegments = new java.util.ArrayList<>();
+            long totalDurationMins = 0;
+            if (trip.getDepartureTime() != null && trip.getArrivalTime() != null) {
+                totalDurationMins = java.time.temporal.ChronoUnit.MINUTES.between(trip.getDepartureTime(), trip.getArrivalTime());
+                if (totalDurationMins < 0) totalDurationMins += 24 * 60;
+            }
+            
+            // Use the distance of the last stop as the actual total distance to ensure fractions never exceed 1.0
+            java.math.BigDecimal totalDistance = stops.get(stops.size() - 1).getDistanceFromSourceKm();
+            if (totalDistance == null || totalDistance.compareTo(java.math.BigDecimal.ZERO) == 0) {
+                totalDistance = trip.getRoute().getDistance(); // Fallback
+            }
+            
+            for (int i = 0; i < stops.size() - 1; i++) {
+                com.crimsonlogic.busticketbooking.entity.RouteStop bStop = stops.get(i);
+                com.crimsonlogic.busticketbooking.entity.RouteStop dStop = stops.get(i + 1);
+                
+                com.crimsonlogic.busticketbooking.dto.TripSegmentDTO tsDTO = new com.crimsonlogic.busticketbooking.dto.TripSegmentDTO();
+                tsDTO.setId("synth-" + i);
+                tsDTO.setTripId(trip.getTripId());
+                
+                tsDTO.setBoardingStopId(bStop.getRouteStopId());
+                tsDTO.setBoardingStopName(bStop.getStopName());
+                if (bStop.getFareLocation() != null) tsDTO.setBoardingZoneName(bStop.getFareLocation().getName());
+                
+                if (i == 0) {
+                    tsDTO.setDepartureTime(trip.getDepartureTime());
+                } else if (trip.getDepartureTime() != null && totalDistance != null && totalDistance.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    double fraction = bStop.getDistanceFromSourceKm().doubleValue() / totalDistance.doubleValue();
+                    // Cap fraction at 1.0 to avoid overshooting
+                    if (fraction > 1.0) fraction = 1.0;
+                    long minsToAdd = (long) (totalDurationMins * fraction);
+                    tsDTO.setDepartureTime(trip.getDepartureTime().plusMinutes(minsToAdd));
+                } else {
+                    tsDTO.setDepartureTime(trip.getDepartureTime());
+                }
+                tsDTO.setDepartureDate(trip.getTravelDate());
+                
+                tsDTO.setDroppingStopId(dStop.getRouteStopId());
+                tsDTO.setDroppingStopName(dStop.getStopName());
+                if (dStop.getFareLocation() != null) tsDTO.setDroppingZoneName(dStop.getFareLocation().getName());
+                
+                if (i == stops.size() - 2) {
+                    tsDTO.setArrivalTime(trip.getArrivalTime());
+                } else if (trip.getDepartureTime() != null && totalDistance != null && totalDistance.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    double fraction = dStop.getDistanceFromSourceKm().doubleValue() / totalDistance.doubleValue();
+                    if (fraction > 1.0) fraction = 1.0;
+                    long minsToAdd = (long) (totalDurationMins * fraction);
+                    tsDTO.setArrivalTime(trip.getDepartureTime().plusMinutes(minsToAdd));
+                } else {
+                    tsDTO.setArrivalTime(trip.getArrivalTime());
+                }
+                tsDTO.setArrivalDate(trip.getArrivalDate() != null ? trip.getArrivalDate() : trip.getTravelDate());
+                
+                tsDTO.setFare(trip.getBaseFare());
+                syntheticSegments.add(tsDTO);
+            }
+            dto.setSegments(syntheticSegments);
         } else {
             dto.setSegments(new java.util.ArrayList<>());
         }
@@ -1001,6 +1177,60 @@ public class TripServiceImpl implements TripService {
         }
 
         return dto;
+    }
+
+    private void validateSegmentsTiming(java.util.List<com.crimsonlogic.busticketbooking.dto.TripSegmentCreateRequest> segments) {
+        if (segments == null || segments.isEmpty()) return;
+
+        java.util.Map<String, String> boardingPointToTime = new java.util.HashMap<>();
+        java.util.Map<String, String> timeToBoardingPoint = new java.util.HashMap<>();
+        
+        java.util.Map<String, String> droppingPointToTime = new java.util.HashMap<>();
+        java.util.Map<String, String> timeToDroppingPoint = new java.util.HashMap<>();
+
+        java.util.Set<String> segmentPairs = new java.util.HashSet<>();
+
+        for (com.crimsonlogic.busticketbooking.dto.TripSegmentCreateRequest seg : segments) {
+            String pairKey = seg.getBoardingStopId() + "-" + seg.getDroppingStopId();
+            if (!segmentPairs.add(pairKey)) {
+                throw new IllegalArgumentException("This boarding point and dropping point combination already exists.");
+            }
+
+            String depTimeKey = (seg.getDepartureDate() != null ? seg.getDepartureDate().toString() : "") + "-" + (seg.getDepartureTime() != null ? seg.getDepartureTime().toString() : "");
+            String arrTimeKey = (seg.getArrivalDate() != null ? seg.getArrivalDate().toString() : "") + "-" + (seg.getArrivalTime() != null ? seg.getArrivalTime().toString() : "");
+
+            if (boardingPointToTime.containsKey(seg.getBoardingStopId())) {
+                if (!boardingPointToTime.get(seg.getBoardingStopId()).equals(depTimeKey)) {
+                    throw new IllegalArgumentException("The same boarding point cannot have different departure times or days.");
+                }
+            } else {
+                boardingPointToTime.put(seg.getBoardingStopId(), depTimeKey);
+            }
+
+            if (timeToBoardingPoint.containsKey(depTimeKey)) {
+                if (!timeToBoardingPoint.get(depTimeKey).equals(seg.getBoardingStopId())) {
+                    throw new IllegalArgumentException("Different boarding points cannot have the same departure time and day.");
+                }
+            } else {
+                timeToBoardingPoint.put(depTimeKey, seg.getBoardingStopId());
+            }
+
+            if (droppingPointToTime.containsKey(seg.getDroppingStopId())) {
+                if (!droppingPointToTime.get(seg.getDroppingStopId()).equals(arrTimeKey)) {
+                    throw new IllegalArgumentException("The same dropping point cannot have different arrival times or days.");
+                }
+            } else {
+                droppingPointToTime.put(seg.getDroppingStopId(), arrTimeKey);
+            }
+
+            if (timeToDroppingPoint.containsKey(arrTimeKey)) {
+                if (!timeToDroppingPoint.get(arrTimeKey).equals(seg.getDroppingStopId())) {
+                    throw new IllegalArgumentException("Different dropping points cannot have the same arrival time and day.");
+                }
+            } else {
+                timeToDroppingPoint.put(arrTimeKey, seg.getDroppingStopId());
+            }
+        }
     }
 
     private String generateId() {

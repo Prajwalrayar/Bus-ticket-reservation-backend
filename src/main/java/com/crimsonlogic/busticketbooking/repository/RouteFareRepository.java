@@ -12,7 +12,7 @@ public interface RouteFareRepository extends JpaRepository<RouteFare, String> {
 
     List<RouteFare> findByRoute_RouteId(String routeId);
 
-    List<RouteFare> findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCase(
+    List<RouteFare> findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseOrderByCreatedAtAsc(
             String source, String destination);
 
     Optional<RouteFare> findByFromFareLocation_FareLocationIdAndToFareLocation_FareLocationId(

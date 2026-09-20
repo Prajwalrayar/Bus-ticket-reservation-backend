@@ -11,7 +11,7 @@ public interface FareLocationRepository extends JpaRepository<FareLocation, Stri
 
     List<FareLocation> findByRoute_RouteId(String routeId);
 
-    List<FareLocation> findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCase(
+    List<FareLocation> findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseOrderByCreatedAtAsc(
             String source, String destination);
 
     boolean existsByRoute_RouteIdAndNameIgnoreCase(String routeId, String name);

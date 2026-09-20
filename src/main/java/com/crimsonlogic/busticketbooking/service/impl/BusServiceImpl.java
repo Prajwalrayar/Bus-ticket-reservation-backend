@@ -1,13 +1,11 @@
 package com.crimsonlogic.busticketbooking.service.impl;
 
-import com.crimsonlogic.busticketbooking.dto.BusCreateRequest;
-import com.crimsonlogic.busticketbooking.dto.BusDTO;
-import com.crimsonlogic.busticketbooking.dto.BusSeatCreateRequest;
-import com.crimsonlogic.busticketbooking.dto.BusSeatDTO;
+import com.crimsonlogic.busticketbooking.dto.*;
 import com.crimsonlogic.busticketbooking.entity.Bus;
 import com.crimsonlogic.busticketbooking.entity.BusSeat;
 import com.crimsonlogic.busticketbooking.entity.Operator;
 import com.crimsonlogic.busticketbooking.enums.BookingStatus;
+import com.crimsonlogic.busticketbooking.enums.BusActivationStatus;
 import com.crimsonlogic.busticketbooking.repository.BookingRepository;
 import com.crimsonlogic.busticketbooking.repository.BusRepository;
 import com.crimsonlogic.busticketbooking.repository.BusSeatRepository;
@@ -15,14 +13,25 @@ import com.crimsonlogic.busticketbooking.repository.OperatorRepository;
 import com.crimsonlogic.busticketbooking.repository.UserRepository;
 import com.crimsonlogic.busticketbooking.service.BusService;
 import com.crimsonlogic.busticketbooking.util.EntityIdGenerator;
+import com.razorpay.Order;
+import com.razorpay.RazorpayClient;
+import com.razorpay.RazorpayException;
+import com.razorpay.Utils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -33,6 +42,13 @@ public class BusServiceImpl implements BusService {
     private final OperatorRepository operatorRepository;
     private final UserRepository userRepository;
     private final BookingRepository bookingRepository;
+    private final RazorpayClient razorpayClient;
+
+    @Value("${razorpay.key.id}")
+    private String razorpayKeyId;
+
+    @Value("${razorpay.key.secret}")
+    private String razorpaySecret;
 
     /** Booking statuses that constitute an "active" booking for Phase 6 guards. */
     private static final List<BookingStatus> ACTIVE_STATUSES =
@@ -53,6 +69,16 @@ public class BusServiceImpl implements BusService {
         }
     }
 
+    private void requireAdmin() {
+        String currentUserEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+        com.crimsonlogic.busticketbooking.entity.User currentUser = userRepository.findByUserEmailIgnoreCase(currentUserEmail)
+                .orElseThrow(() -> new AccessDeniedException("Authenticated user not found"));
+        boolean isAdmin = currentUser.getUserRoles().stream()
+                .anyMatch(role -> role.getRoleName().equals("ADMIN"));
+        if (!isAdmin) {
+            throw new AccessDeniedException("Only administrators can perform this action.");
+        }
+    }
 
     // =========================================================
     // BUS OPERATIONS
@@ -63,84 +89,52 @@ public class BusServiceImpl implements BusService {
         authorizeOperatorAccess(request.getOperatorCompanyName());
 
         Operator operator = operatorRepository
-                .findByCompanyNameIgnoreCase(
-                        request.getOperatorCompanyName()
-                )
-                .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "Operator with company name '"
-                                        + request.getOperatorCompanyName()
-                                        + "' not found"
-                        )
-                );
+                .findByCompanyNameIgnoreCase(request.getOperatorCompanyName())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Operator with company name '" + request.getOperatorCompanyName() + "' not found"));
 
         if (!Boolean.TRUE.equals(operator.getIsApproved())) {
-            throw new IllegalArgumentException(
-                    "Operator is not approved"
-            );
+            throw new IllegalArgumentException("Operator is not approved");
         }
 
         if (!Boolean.TRUE.equals(operator.getIsActive())) {
-            throw new IllegalArgumentException(
-                    "Operator is inactive"
-            );
+            throw new IllegalArgumentException("Operator is inactive");
         }
 
-        if (busRepository.existsByRegistrationNumberIgnoreCase(
-                request.getRegistrationNumber())) {
-
+        if (busRepository.existsByRegistrationNumberIgnoreCase(request.getRegistrationNumber())) {
             throw new IllegalArgumentException(
-                    "Bus with registration number '"
-                            + request.getRegistrationNumber()
-                            + "' already exists"
-            );
+                    "Bus with registration number '" + request.getRegistrationNumber() + "' already exists");
         }
 
         Bus bus = new Bus();
-
         bus.setBusId(generateId());
-
-        bus.setRegistrationNumber(
-                request.getRegistrationNumber().trim()
-        );
-
-        bus.setBusType(
-                request.getBusType()
-        );
+        bus.setRegistrationNumber(request.getRegistrationNumber().trim());
+        bus.setBusType(request.getBusType());
 
         if (request.getAmenities() != null) {
-            bus.setAmenities(
-                    request.getAmenities()
-            );
+            bus.setAmenities(request.getAmenities());
         }
 
         bus.setOperator(operator);
         bus.setIsActive(true);
-        
         bus.setPetsAllowed(request.getPetsAllowed() != null ? request.getPetsAllowed() : false);
         bus.setBaggagePolicy(request.getBaggagePolicy());
+        bus.setActivationRequestStatus(BusActivationStatus.NONE);
 
-        return convertToBusDTO(
-                busRepository.save(bus)
-        );
+        return convertToBusDTO(busRepository.save(bus));
     }
 
 
     @Override
     @Transactional(readOnly = true)
-    public BusDTO getBusByRegistrationNumber(
-            String registrationNumber) {
-
-        Bus bus = findBus(registrationNumber);
-
-        return convertToBusDTO(bus);
+    public BusDTO getBusByRegistrationNumber(String registrationNumber) {
+        return convertToBusDTO(findBus(registrationNumber));
     }
 
 
     @Override
     @Transactional(readOnly = true)
     public List<BusDTO> getAllBuses() {
-
         String currentUserEmail = SecurityContextHolder.getContext().getAuthentication().getName();
         com.crimsonlogic.busticketbooking.entity.User currentUser = userRepository.findByUserEmailIgnoreCase(currentUserEmail)
                 .orElseThrow(() -> new AccessDeniedException("Authenticated user not found"));
@@ -155,62 +149,35 @@ public class BusServiceImpl implements BusService {
             buses = busRepository.findByOperator_CompanyNameIgnoreCase(currentUser.getOperator().getCompanyName());
         }
 
-        return buses.stream()
-                .map(this::convertToBusDTO)
-                .toList();
+        return buses.stream().map(this::convertToBusDTO).toList();
     }
 
 
     @Override
     @Transactional(readOnly = true)
-    public List<BusDTO> getBusesByOperator(
-            String companyName) {
-            
+    public List<BusDTO> getBusesByOperator(String companyName) {
         authorizeOperatorAccess(companyName);
 
-        operatorRepository
-                .findByCompanyNameIgnoreCase(companyName)
-                .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "Operator with company name '"
-                                        + companyName
-                                        + "' not found"
-                        )
-                );
+        operatorRepository.findByCompanyNameIgnoreCase(companyName)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Operator with company name '" + companyName + "' not found"));
 
-        return busRepository
-                .findByOperator_CompanyNameIgnoreCase(
-                        companyName
-                )
-                .stream()
-                .map(this::convertToBusDTO)
-                .toList();
+        return busRepository.findByOperator_CompanyNameIgnoreCase(companyName)
+                .stream().map(this::convertToBusDTO).toList();
     }
 
 
     @Override
-    public BusDTO updateBus(
-            String registrationNumber,
-            BusCreateRequest request) {
-
-        Bus existingBus =
-                findBus(registrationNumber);
-
+    public BusDTO updateBus(String registrationNumber, BusCreateRequest request) {
+        Bus existingBus = findBus(registrationNumber);
         authorizeOperatorAccess(existingBus.getOperator().getCompanyName());
         if (request.getOperatorCompanyName() != null) {
             authorizeOperatorAccess(request.getOperatorCompanyName());
         }
 
-        // ── Active-booking protection (Phase 6) ───────────────────
-        // Block destructive structural changes (registration number or bus type)
-        // while the bus has CONFIRMED/PENDING bookings on upcoming trips.
-        // Amenity-only updates are always permitted.
         if (isDestructiveChange(existingBus, request)) {
             long activeFutureBookings = bookingRepository
-                    .countActiveFutureBookingsByBusId(
-                            existingBus.getBusId(),
-                            ACTIVE_STATUSES
-                    );
+                    .countActiveFutureBookingsByBusId(existingBus.getBusId(), ACTIVE_STATUSES);
 
             if (activeFutureBookings > 0) {
                 throw new IllegalArgumentException(
@@ -218,42 +185,22 @@ public class BusServiceImpl implements BusService {
                                 + "': it has " + activeFutureBookings
                                 + " active booking(s) on upcoming trips. "
                                 + "Structural changes (type/registration) are blocked "
-                                + "until those trips conclude."
-                );
+                                + "until those trips conclude.");
             }
         }
-        // ──────────────────────────────────────────────────────────
 
-        if (!existingBus.getRegistrationNumber()
-                .equalsIgnoreCase(
-                        request.getRegistrationNumber()
-                )
-                && busRepository
-                .existsByRegistrationNumberIgnoreCase(
-                        request.getRegistrationNumber()
-                )) {
-
+        if (!existingBus.getRegistrationNumber().equalsIgnoreCase(request.getRegistrationNumber())
+                && busRepository.existsByRegistrationNumberIgnoreCase(request.getRegistrationNumber())) {
             throw new IllegalArgumentException(
-                    "Another bus with registration number '"
-                            + request.getRegistrationNumber()
-                            + "' already exists"
-            );
+                    "Another bus with registration number '" + request.getRegistrationNumber() + "' already exists");
         }
 
-        existingBus.setRegistrationNumber(
-                request.getRegistrationNumber().trim()
-        );
-
-        existingBus.setBusType(
-                request.getBusType()
-        );
+        existingBus.setRegistrationNumber(request.getRegistrationNumber().trim());
+        existingBus.setBusType(request.getBusType());
 
         if (request.getAmenities() != null) {
-            existingBus.setAmenities(
-                    request.getAmenities()
-            );
+            existingBus.setAmenities(request.getAmenities());
         }
-        
         if (request.getPetsAllowed() != null) {
             existingBus.setPetsAllowed(request.getPetsAllowed());
         }
@@ -261,57 +208,194 @@ public class BusServiceImpl implements BusService {
             existingBus.setBaggagePolicy(request.getBaggagePolicy());
         }
 
-        /*
-         * Operator is deliberately not changed.
-         * Operator transfer should be a separate business operation.
-         */
+        return convertToBusDTO(busRepository.save(existingBus));
+    }
 
-        return convertToBusDTO(
-                busRepository.save(existingBus)
-        );
+
+    // =========================================================
+    // ACTIVATION REQUEST WORKFLOW
+    // =========================================================
+
+    @Override
+    public void requestActivation(String registrationNumber, String reason) {
+        Bus bus = findBus(registrationNumber);
+        authorizeOperatorAccess(bus.getOperator().getCompanyName());
+
+        if (Boolean.TRUE.equals(bus.getIsActive())) {
+            throw new IllegalArgumentException("Bus is already active.");
+        }
+
+        BusActivationStatus status = bus.getActivationRequestStatus();
+        if (status == BusActivationStatus.PENDING) {
+            throw new IllegalArgumentException("An activation request is already pending for this bus.");
+        }
+        if (status == BusActivationStatus.APPROVED) {
+            throw new IllegalArgumentException("Request already approved. Please complete payment to activate.");
+        }
+
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Reason for reactivation is required.");
+        }
+
+        bus.setActivationRequestStatus(BusActivationStatus.PENDING);
+        bus.setActivationRequestNote(reason.trim());
+        bus.setActivationRequestedAt(LocalDateTime.now());
+        bus.setCompensationAmount(null);
+        bus.setAdminRejectionNote(null);
+        bus.setActivationApprovedAt(null);
+        busRepository.save(bus);
     }
 
 
     @Override
-    public void deactivateBus(
-            String registrationNumber) {
-
+    public void approveActivationRequest(String registrationNumber, BigDecimal compensationAmount, String adminNote) {
+        requireAdmin();
         Bus bus = findBus(registrationNumber);
-        
+
+        if (bus.getActivationRequestStatus() != BusActivationStatus.PENDING) {
+            throw new IllegalArgumentException("No pending activation request for this bus.");
+        }
+
+        if (compensationAmount == null || compensationAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Compensation amount must be >= 0.");
+        }
+
+        bus.setActivationRequestStatus(BusActivationStatus.APPROVED);
+        bus.setCompensationAmount(compensationAmount);
+        bus.setActivationApprovedAt(LocalDateTime.now());
+        bus.setAdminRejectionNote(adminNote);
+        busRepository.save(bus);
+    }
+
+
+    @Override
+    public void rejectActivationRequest(String registrationNumber, String adminNote) {
+        requireAdmin();
+        Bus bus = findBus(registrationNumber);
+
+        if (bus.getActivationRequestStatus() != BusActivationStatus.PENDING) {
+            throw new IllegalArgumentException("No pending activation request for this bus.");
+        }
+
+        bus.setActivationRequestStatus(BusActivationStatus.REJECTED);
+        bus.setAdminRejectionNote(adminNote);
+        busRepository.save(bus);
+    }
+
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BusDTO> getPendingActivationRequests() {
+        requireAdmin();
+        return busRepository.findByActivationRequestStatus(BusActivationStatus.PENDING)
+                .stream().map(this::convertToBusDTO).toList();
+    }
+
+
+    @Override
+    public RazorpayOrderResponse createCompensationRazorpayOrder(String registrationNumber) {
+        Bus bus = findBus(registrationNumber);
         authorizeOperatorAccess(bus.getOperator().getCompanyName());
 
-        if (!Boolean.TRUE.equals(bus.getIsActive())) {
-            throw new IllegalArgumentException(
-                    "Bus is already inactive"
-            );
+        if (bus.getActivationRequestStatus() != BusActivationStatus.APPROVED) {
+            throw new IllegalArgumentException("Bus activation has not been approved by admin yet.");
         }
 
-        // ── Active-booking protection (Phase 6) ───────────────────
-        // A bus cannot be deactivated if passengers have already booked seats
-        // on any upcoming trip operated by this bus.
-        long activeFutureBookings = bookingRepository
-                .countActiveFutureBookingsByBusId(
-                        bus.getBusId(),
-                        ACTIVE_STATUSES
-                );
-
-        if (activeFutureBookings > 0) {
-            throw new IllegalArgumentException(
-                    "Cannot deactivate bus '" + bus.getRegistrationNumber()
-                            + "': it has " + activeFutureBookings
-                            + " active booking(s) on upcoming trips. "
-                            + "The bus must remain active until those trips conclude."
-            );
+        BigDecimal amount = bus.getCompensationAmount();
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Invalid compensation amount.");
         }
-        // ──────────────────────────────────────────────────────────
 
-        /*
-         * Soft deactivation is important because historical
-         * trips and bookings can reference this bus.
-         */
-        bus.setIsActive(false);
+        RazorpayOrderResponse response = new RazorpayOrderResponse();
 
+        // If compensation is zero, skip Razorpay and activate directly
+        if (amount.compareTo(BigDecimal.ZERO) == 0) {
+            activateBusInternal(bus);
+            response.setOrderId(null);
+            response.setAmount(BigDecimal.ZERO);
+            response.setKeyId(razorpayKeyId);
+            response.setCurrency("INR");
+            return response;
+        }
+
+        try {
+            JSONObject orderRequest = new JSONObject();
+            orderRequest.put("amount", amount.multiply(new BigDecimal("100")).intValue());
+            orderRequest.put("currency", "INR");
+            orderRequest.put("receipt", "BUS_ACTIVATION_" + bus.getBusId());
+
+            Order razorpayOrder = razorpayClient.orders.create(orderRequest);
+
+            response.setOrderId(razorpayOrder.get("id"));
+            response.setKeyId(razorpayKeyId);
+            response.setAmount(amount);
+            response.setCurrency("INR");
+        } catch (RazorpayException e) {
+            log.error("Failed to create Razorpay Order for bus activation", e);
+            throw new RuntimeException("Failed to create Razorpay Order: " + e.getMessage());
+        }
+
+        return response;
+    }
+
+
+    @Override
+    public void verifyCompensationAndActivate(String registrationNumber, RazorpayVerificationRequest request) {
+        Bus bus = findBus(registrationNumber);
+        authorizeOperatorAccess(bus.getOperator().getCompanyName());
+
+        if (bus.getActivationRequestStatus() != BusActivationStatus.APPROVED) {
+            throw new IllegalArgumentException("Bus activation has not been approved by admin yet.");
+        }
+
+        try {
+            JSONObject options = new JSONObject();
+            options.put("razorpay_order_id", request.getRazorpayOrderId());
+            options.put("razorpay_payment_id", request.getRazorpayPaymentId());
+            options.put("razorpay_signature", request.getRazorpaySignature());
+
+            boolean isValid = Utils.verifyPaymentSignature(options, razorpaySecret);
+
+            if (isValid) {
+                activateBusInternal(bus);
+                log.info("Bus {} successfully activated after compensation payment.", registrationNumber);
+            } else {
+                throw new IllegalArgumentException("Payment verification failed. Invalid signature.");
+            }
+        } catch (RazorpayException e) {
+            log.error("Razorpay verification error for bus activation", e);
+            throw new RuntimeException("Payment verification error: " + e.getMessage());
+        }
+    }
+
+
+    private void activateBusInternal(Bus bus) {
+        bus.setIsActive(true);
+        bus.setActivationRequestStatus(BusActivationStatus.NONE);
+        bus.setActivationRequestNote(null);
+        bus.setCompensationAmount(null);
+        bus.setAdminRejectionNote(null);
+        bus.setActivationRequestedAt(null);
+        bus.setActivationApprovedAt(null);
         busRepository.save(bus);
+    }
+
+
+    // =========================================================
+    // AUTO-DEACTIVATION (called by scheduler)
+    // =========================================================
+
+    @Override
+    public void autoDeactivateInactiveBuses() {
+        LocalDate cutoff = LocalDate.now().minusDays(10);
+        List<Bus> inactive = busRepository.findActiveBusesInactiveSince(cutoff);
+        for (Bus bus : inactive) {
+            bus.setIsActive(false);
+            // Reset activation status so operator can request reactivation
+            bus.setActivationRequestStatus(BusActivationStatus.NONE);
+            log.info("Auto-deactivated bus {} due to 10-day inactivity.", bus.getRegistrationNumber());
+        }
+        busRepository.saveAll(inactive);
     }
 
 
@@ -320,188 +404,88 @@ public class BusServiceImpl implements BusService {
     // =========================================================
 
     @Override
-    public BusSeatDTO createBusSeat(
-            String busRegistrationNumber,
-            BusSeatCreateRequest request) {
-
+    public BusSeatDTO createBusSeat(String busRegistrationNumber, BusSeatCreateRequest request) {
         Bus bus = findBus(busRegistrationNumber);
-
-        // Verify the operator owns this bus before adding seats
         authorizeOperatorAccess(bus.getOperator().getCompanyName());
 
         if (!Boolean.TRUE.equals(bus.getIsActive())) {
-            throw new IllegalArgumentException(
-                    "Cannot add a seat to an inactive bus"
-            );
+            throw new IllegalArgumentException("Cannot add a seat to an inactive bus");
         }
 
-        if (busSeatRepository
-                .existsByBus_RegistrationNumberIgnoreCaseAndSeatNumberIgnoreCase(
-                        busRegistrationNumber,
-                        request.getSeatNumber()
-                )) {
-
+        if (busSeatRepository.existsByBus_RegistrationNumberIgnoreCaseAndSeatNumberIgnoreCase(
+                busRegistrationNumber, request.getSeatNumber())) {
             throw new IllegalArgumentException(
-                    "Seat number '"
-                            + request.getSeatNumber()
-                            + "' already exists on this bus"
-            );
+                    "Seat number '" + request.getSeatNumber() + "' already exists on this bus");
         }
 
         BusSeat busSeat = new BusSeat();
-
         busSeat.setBusSeatId(generateId());
-
-        busSeat.setSeatNumber(
-                request.getSeatNumber().trim()
-        );
-
-        busSeat.setSeatPosition(
-                request.getSeatPosition()
-        );
-
+        busSeat.setSeatNumber(request.getSeatNumber().trim());
+        busSeat.setSeatPosition(request.getSeatPosition());
         busSeat.setIsActive(true);
         busSeat.setBus(bus);
 
-        return convertToBusSeatDTO(
-                busSeatRepository.save(busSeat)
-        );
+        return convertToBusSeatDTO(busSeatRepository.save(busSeat));
     }
 
 
     @Override
     @Transactional(readOnly = true)
-    public BusSeatDTO getBusSeat(
-            String busRegistrationNumber,
-            String seatNumber) {
-
-        BusSeat busSeat =
-                busSeatRepository
-                        .findByBus_RegistrationNumberIgnoreCaseAndSeatNumberIgnoreCase(
-                                busRegistrationNumber,
-                                seatNumber
-                        )
-                        .orElseThrow(() ->
-                                new IllegalArgumentException(
-                                        "Seat '"
-                                                + seatNumber
-                                                + "' not found on bus '"
-                                                + busRegistrationNumber
-                                                + "'"
-                                )
-                        );
-
+    public BusSeatDTO getBusSeat(String busRegistrationNumber, String seatNumber) {
+        BusSeat busSeat = busSeatRepository
+                .findByBus_RegistrationNumberIgnoreCaseAndSeatNumberIgnoreCase(busRegistrationNumber, seatNumber)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Seat '" + seatNumber + "' not found on bus '" + busRegistrationNumber + "'"));
         return convertToBusSeatDTO(busSeat);
     }
 
 
     @Override
     @Transactional(readOnly = true)
-    public List<BusSeatDTO> getSeatsByBus(
-            String busRegistrationNumber) {
-
+    public List<BusSeatDTO> getSeatsByBus(String busRegistrationNumber) {
         findBus(busRegistrationNumber);
-
-        return busSeatRepository
-                .findByBus_RegistrationNumberIgnoreCase(
-                        busRegistrationNumber
-                )
-                .stream()
-                .map(this::convertToBusSeatDTO)
-                .toList();
+        return busSeatRepository.findByBus_RegistrationNumberIgnoreCase(busRegistrationNumber)
+                .stream().map(this::convertToBusSeatDTO).toList();
     }
 
 
     @Override
-    public BusSeatDTO updateBusSeat(
-            String busRegistrationNumber,
-            String seatNumber,
-            BusSeatCreateRequest request) {
+    public BusSeatDTO updateBusSeat(String busRegistrationNumber, String seatNumber, BusSeatCreateRequest request) {
+        BusSeat existingSeat = busSeatRepository
+                .findByBus_RegistrationNumberIgnoreCaseAndSeatNumberIgnoreCase(busRegistrationNumber, seatNumber)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Seat '" + seatNumber + "' not found on bus '" + busRegistrationNumber + "'"));
 
-        BusSeat existingSeat =
-                busSeatRepository
-                        .findByBus_RegistrationNumberIgnoreCaseAndSeatNumberIgnoreCase(
-                                busRegistrationNumber,
-                                seatNumber
-                        )
-                        .orElseThrow(() ->
-                                new IllegalArgumentException(
-                                        "Seat '"
-                                                + seatNumber
-                                                + "' not found on bus '"
-                                                + busRegistrationNumber
-                                                + "'"
-                                )
-                        );
-
-        // Verify the operator owns this bus before updating seats
         authorizeOperatorAccess(existingSeat.getBus().getOperator().getCompanyName());
 
-        if (!existingSeat.getSeatNumber()
-                .equalsIgnoreCase(
-                        request.getSeatNumber()
-                )
-                && busSeatRepository
-                .existsByBus_RegistrationNumberIgnoreCaseAndSeatNumberIgnoreCase(
-                        busRegistrationNumber,
-                        request.getSeatNumber()
-                )) {
-
+        if (!existingSeat.getSeatNumber().equalsIgnoreCase(request.getSeatNumber())
+                && busSeatRepository.existsByBus_RegistrationNumberIgnoreCaseAndSeatNumberIgnoreCase(
+                        busRegistrationNumber, request.getSeatNumber())) {
             throw new IllegalArgumentException(
-                    "Seat number '"
-                            + request.getSeatNumber()
-                            + "' already exists on this bus"
-            );
+                    "Seat number '" + request.getSeatNumber() + "' already exists on this bus");
         }
 
-        existingSeat.setSeatNumber(
-                request.getSeatNumber().trim()
-        );
+        existingSeat.setSeatNumber(request.getSeatNumber().trim());
+        existingSeat.setSeatPosition(request.getSeatPosition());
 
-        existingSeat.setSeatPosition(
-                request.getSeatPosition()
-        );
-
-        return convertToBusSeatDTO(
-                busSeatRepository.save(existingSeat)
-        );
+        return convertToBusSeatDTO(busSeatRepository.save(existingSeat));
     }
 
 
     @Override
-    public void deactivateBusSeat(
-            String busRegistrationNumber,
-            String seatNumber) {
+    public void deactivateBusSeat(String busRegistrationNumber, String seatNumber) {
+        BusSeat busSeat = busSeatRepository
+                .findByBus_RegistrationNumberIgnoreCaseAndSeatNumberIgnoreCase(busRegistrationNumber, seatNumber)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Seat '" + seatNumber + "' not found on bus '" + busRegistrationNumber + "'"));
 
-        BusSeat busSeat =
-                busSeatRepository
-                        .findByBus_RegistrationNumberIgnoreCaseAndSeatNumberIgnoreCase(
-                                busRegistrationNumber,
-                                seatNumber
-                        )
-                        .orElseThrow(() ->
-                                new IllegalArgumentException(
-                                        "Seat '"
-                                                + seatNumber
-                                                + "' not found on bus '"
-                                                + busRegistrationNumber
-                                                + "'"
-                                )
-                        );
-
-        // Verify the operator owns this bus before deactivating seats
         authorizeOperatorAccess(busSeat.getBus().getOperator().getCompanyName());
 
-        if (!Boolean.TRUE.equals(
-                busSeat.getIsActive())) {
-
-            throw new IllegalArgumentException(
-                    "Seat is already inactive"
-            );
+        if (!Boolean.TRUE.equals(busSeat.getIsActive())) {
+            throw new IllegalArgumentException("Seat is already inactive");
         }
 
         busSeat.setIsActive(false);
-
         busSeatRepository.save(busSeat);
     }
 
@@ -511,85 +495,47 @@ public class BusServiceImpl implements BusService {
     // =========================================================
 
     private Bus findBus(String registrationNumber) {
-
-        return busRepository
-                .findByRegistrationNumberIgnoreCase(
-                        registrationNumber
-                )
-                .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "Bus with registration number '"
-                                        + registrationNumber
-                                        + "' not found"
-                        )
-                );
+        return busRepository.findByRegistrationNumberIgnoreCase(registrationNumber)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Bus with registration number '" + registrationNumber + "' not found"));
     }
 
 
     private BusDTO convertToBusDTO(Bus bus) {
-
         BusDTO dto = new BusDTO();
-
-        dto.setBusId(
-                bus.getBusId()
-        );
-
-        dto.setRegistrationNumber(
-                bus.getRegistrationNumber()
-        );
-
-        dto.setBusType(
-                bus.getBusType()
-        );
-
-        dto.setAmenities(
-                bus.getAmenities()
-        );
-
-        dto.setIsActive(
-                bus.getIsActive()
-        );
+        dto.setBusId(bus.getBusId());
+        dto.setRegistrationNumber(bus.getRegistrationNumber());
+        dto.setBusType(bus.getBusType());
+        dto.setAmenities(bus.getAmenities());
+        dto.setIsActive(bus.getIsActive());
 
         if (bus.getOperator() != null) {
-            dto.setOperatorCompanyName(
-                    bus.getOperator()
-                            .getCompanyName()
-            );
+            dto.setOperatorCompanyName(bus.getOperator().getCompanyName());
         }
-        
+
         dto.setPetsAllowed(bus.getPetsAllowed());
         dto.setBaggagePolicy(bus.getBaggagePolicy());
+        dto.setLastTripDate(bus.getLastTripDate());
+        dto.setActivationRequestStatus(bus.getActivationRequestStatus());
+        dto.setActivationRequestNote(bus.getActivationRequestNote());
+        dto.setCompensationAmount(bus.getCompensationAmount());
+        dto.setAdminRejectionNote(bus.getAdminRejectionNote());
+        dto.setActivationRequestedAt(bus.getActivationRequestedAt());
+        dto.setActivationApprovedAt(bus.getActivationApprovedAt());
 
         return dto;
     }
 
 
-    private BusSeatDTO convertToBusSeatDTO(
-            BusSeat busSeat) {
-
+    private BusSeatDTO convertToBusSeatDTO(BusSeat busSeat) {
         BusSeatDTO dto = new BusSeatDTO();
-
-        dto.setBusSeatId(
-                busSeat.getBusSeatId()
-        );
-
-        dto.setSeatNumber(
-                busSeat.getSeatNumber()
-        );
-
-        dto.setSeatPosition(
-                busSeat.getSeatPosition()
-        );
-
-        dto.setIsActive(
-                busSeat.getIsActive()
-        );
+        dto.setBusSeatId(busSeat.getBusSeatId());
+        dto.setSeatNumber(busSeat.getSeatNumber());
+        dto.setSeatPosition(busSeat.getSeatPosition());
+        dto.setIsActive(busSeat.getIsActive());
 
         if (busSeat.getBus() != null) {
-            dto.setBusRegistrationNumber(
-                    busSeat.getBus()
-                            .getRegistrationNumber()
-            );
+            dto.setBusRegistrationNumber(busSeat.getBus().getRegistrationNumber());
         }
 
         return dto;
@@ -600,21 +546,9 @@ public class BusServiceImpl implements BusService {
         return EntityIdGenerator.generateStatic(EntityIdGenerator.PREFIX_BUS);
     }
 
-    /**
-     * A change is considered "destructive" if it alters the bus's structural
-     * identity — specifically its registration number or bus type.
-     *
-     * Passengers choose a bus partly based on its type (Sleeper vs Seater).
-     * Changing these after bookings exist would silently break the contract
-     * with booked passengers.
-     *
-     * Amenity changes (e.g. adding WiFi) are non-destructive and always allowed.
-     */
     private boolean isDestructiveChange(Bus existing, BusCreateRequest request) {
-        boolean regChanged = !existing.getRegistrationNumber()
-                .equalsIgnoreCase(request.getRegistrationNumber());
-        boolean typeChanged = existing.getBusType() != null
-                && !existing.getBusType().equals(request.getBusType());
+        boolean regChanged = !existing.getRegistrationNumber().equalsIgnoreCase(request.getRegistrationNumber());
+        boolean typeChanged = existing.getBusType() != null && !existing.getBusType().equals(request.getBusType());
         return regChanged || typeChanged;
     }
 }

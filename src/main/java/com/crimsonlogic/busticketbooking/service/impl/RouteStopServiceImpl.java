@@ -238,25 +238,21 @@ public class RouteStopServiceImpl implements RouteStopService {
          * used by another stop on the route for this type.
          */
         if (!existingStop.getStopSequence().equals(request.getStopSequence()) || existingStop.getStopType() != request.getStopType()) {
-            boolean sequenceExists = false;
-            if (request.getStopType() == StopType.INTERMEDIATE) {
-                 sequenceExists = routeStopRepository
-                    .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
-                            source, destination, request.getStopSequence(), StopType.BOARDING) ||
-                    routeStopRepository
-                    .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
-                            source, destination, request.getStopSequence(), StopType.DROPPING) ||
-                    routeStopRepository
-                    .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
-                            source, destination, request.getStopSequence(), StopType.INTERMEDIATE);
-            } else {
-                 sequenceExists = routeStopRepository
-                    .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
-                            source, destination, request.getStopSequence(), request.getStopType()) ||
-                    routeStopRepository
-                    .existsByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequenceAndStopType(
-                            source, destination, request.getStopSequence(), StopType.INTERMEDIATE);
-            }
+            List<RouteStop> stopsWithSeq = routeStopRepository.findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequence(
+                    source, destination, request.getStopSequence());
+            
+            boolean sequenceExists = stopsWithSeq.stream()
+                    .filter(s -> !s.getRouteStopId().equals(existingStop.getRouteStopId()))
+                    .anyMatch(s -> {
+                        if (request.getStopType() == StopType.INTERMEDIATE) {
+                            return s.getStopType() == StopType.BOARDING || 
+                                   s.getStopType() == StopType.DROPPING || 
+                                   s.getStopType() == StopType.INTERMEDIATE;
+                        } else {
+                            return s.getStopType() == request.getStopType() || 
+                                   s.getStopType() == StopType.INTERMEDIATE;
+                        }
+                    });
             
             if (sequenceExists) {
                 throw new IllegalArgumentException(

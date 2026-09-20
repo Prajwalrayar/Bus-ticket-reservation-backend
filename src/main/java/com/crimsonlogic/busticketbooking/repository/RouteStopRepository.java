@@ -45,4 +45,11 @@ public interface RouteStopRepository extends JpaRepository<RouteStop, String> {
             String destination,
             StopType stopType
     );
+
+    List<RouteStop>
+    findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseAndStopSequence(
+            String source,
+            String destination,
+            Integer stopSequence
+    );
 }

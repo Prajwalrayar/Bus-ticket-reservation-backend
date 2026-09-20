@@ -361,4 +361,30 @@ public class UserServiceImpl implements UserService {
 
         return convertToDTO(newAgent);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<UserDTO> getSupportAgentsForOperator(String busOperatorEmail) {
+        User operatorUser = userRepository.findByUserEmail(busOperatorEmail)
+                .orElseThrow(() -> new com.crimsonlogic.busticketbooking.exception.ResourceNotFoundException("User with email: " + busOperatorEmail));
+
+        com.crimsonlogic.busticketbooking.entity.Operator operator = operatorUser.getOperator();
+        if (operator == null) {
+            throw new IllegalStateException("Current user is not associated with an operator");
+        }
+
+        // Fetch users who belong to this operator and have the SUPPORT_AGENT role
+        // Since we don't have a direct repository method for this, we can fetch all users for the operator
+        // and filter by role, or add a method to UserRepository.
+        // Assuming userRepository has findByOperator(Operator operator) or similar.
+        // If not, we'll stream all users. Wait, better to use the repository.
+        // Let's check what UserRepository has. I will just use findAll and filter for now to avoid breaking changes, 
+        // or add a method. Wait, does User entity have `operator`? Yes, `user.getOperator()`.
+        
+        return userRepository.findAll().stream()
+                .filter(u -> operator.equals(u.getOperator()))
+                .filter(u -> u.getUserRoles().stream().anyMatch(r -> "SUPPORT_AGENT".equals(r.getRoleName())))
+                .map(this::convertToDTO)
+                .collect(java.util.stream.Collectors.toList());
+    }
 }

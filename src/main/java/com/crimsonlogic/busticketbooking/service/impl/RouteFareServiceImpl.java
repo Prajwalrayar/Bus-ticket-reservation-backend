@@ -78,7 +78,7 @@ public class RouteFareServiceImpl implements RouteFareService {
     @Transactional(readOnly = true)
     public List<RouteFareDTO> getRouteFares(String source, String destination) {
         return routeFareRepository
-                .findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCase(source, destination)
+                .findByRoute_SourceIgnoreCaseAndRoute_DestinationIgnoreCaseOrderByCreatedAtAsc(source, destination)
                 .stream()
                 .map(this::convertToDTO)
                 .toList();
